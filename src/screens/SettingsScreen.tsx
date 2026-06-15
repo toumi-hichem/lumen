@@ -1,9 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTheme } from '@/theme/ThemeProvider'
 import { useSettingsStore } from '@/store/settingsStore'
 import { createTtsEngine, listTtsEngines } from '@/tts/registry'
 import type { TtsVoice } from '@/tts/types'
+import {
+  downloadBlob,
+  exportBackup,
+  importBackup,
+} from '@/services/backup'
+import { getErrorMessage } from '@/lib/result'
 
 export function SettingsScreen() {
   const navigate = useNavigate()
@@ -15,6 +21,29 @@ export function SettingsScreen() {
 
   const engines = listTtsEngines()
   const voices = useVoices(tts.engineId)
+  const backupInput = useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = useState<string>()
+
+  const doExport = async () => {
+    setBusy('Exporting…')
+    try {
+      downloadBlob(`lumen-backup-${Date.now()}.zip`, await exportBackup())
+    } finally {
+      setBusy(undefined)
+    }
+  }
+
+  const doImport = async (file: File) => {
+    setBusy('Restoring…')
+    try {
+      const result = await importBackup(await file.arrayBuffer())
+      alert(`Restored ${result.books} books and ${result.highlights} highlights.`)
+    } catch (e) {
+      alert(getErrorMessage(e))
+    } finally {
+      setBusy(undefined)
+    }
+  }
 
   return (
     <div className="app">
@@ -136,6 +165,15 @@ export function SettingsScreen() {
               {reading.justify ? 'On' : 'Off'}
             </button>
           </div>
+          <div className="setting-row">
+            <span>Large tap zones</span>
+            <button
+              className={`chip ${reading.largeTapZones ? 'active' : ''}`}
+              onClick={() => setReading({ largeTapZones: !reading.largeTapZones })}
+            >
+              {reading.largeTapZones ? 'On' : 'Off'}
+            </button>
+          </div>
         </section>
 
         <section className="settings-section">
@@ -218,6 +256,39 @@ export function SettingsScreen() {
             Supertonic runs fully on-device. Drop its model assets into
             <code> public/supertonic</code> (see scripts/fetch-supertonic.sh) to
             enable it; until then the system voice is used.
+          </p>
+        </section>
+
+        <section className="settings-section">
+          <h2>Data & backup</h2>
+          <div className="setting-row">
+            <span>Export library</span>
+            <button className="btn" onClick={() => void doExport()} disabled={!!busy}>
+              {busy === 'Exporting…' ? busy : 'Export .zip'}
+            </button>
+          </div>
+          <div className="setting-row">
+            <span>Restore from backup</span>
+            <button
+              className="btn"
+              onClick={() => backupInput.current?.click()}
+              disabled={!!busy}
+            >
+              {busy === 'Restoring…' ? busy : 'Import .zip'}
+            </button>
+            <input
+              ref={backupInput}
+              type="file"
+              accept=".zip,application/zip"
+              hidden
+              onChange={(e) => {
+                if (e.target.files?.[0]) void doImport(e.target.files[0])
+                e.target.value = ''
+              }}
+            />
+          </div>
+          <p className="muted" style={{ fontSize: 12 }}>
+            Backups include books, progress, bookmarks, highlights and shelves.
           </p>
         </section>
       </main>

@@ -8,6 +8,7 @@ import {
 import { useSettingsStore } from '@/store/settingsStore'
 import { themeRegistry } from './themeRegistry'
 import { applyReadingVars, applyThemeVars, ensureFontLoaded } from './applyTheme'
+import { applyStatusBarTheme } from '@/lib/native'
 import { lightTheme } from './themes'
 import { systemSerif } from './fonts'
 import type { FontDefinition, Theme } from './tokens'
@@ -37,6 +38,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   // Re-skin the app whenever the resolved theme changes.
   useEffect(() => {
     applyThemeVars(theme)
+    void applyStatusBarTheme(theme.mode, theme.tokens.color.background)
   }, [theme])
 
   // Apply typography whenever font or any reading metric changes.

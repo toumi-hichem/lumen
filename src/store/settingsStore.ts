@@ -23,6 +23,8 @@ export interface ReadingPreferences {
   brightness: number
   /** Warm/sepia overlay strength, 0 (off) to 1. */
   warmth: number
+  /** Accessibility: wider page-turn tap targets. */
+  largeTapZones: boolean
 }
 
 export interface TtsPreferences {
@@ -53,6 +55,7 @@ export const defaultSettings: AppSettings = {
     justify: false,
     brightness: 1,
     warmth: 0,
+    largeTapZones: false,
   },
   tts: {
     engineId: 'web-speech',

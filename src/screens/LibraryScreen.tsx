@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLibraryStore } from '@/store/libraryStore'
+import { t } from '@/i18n'
 import type { Book, BookStatus } from '@/domain/models'
 
 type SortKey = 'added' | 'recent' | 'title' | 'author'
@@ -88,22 +89,22 @@ export function LibraryScreen() {
   return (
     <div className="app">
       <header className="appbar">
-        <h1>Lumen</h1>
+        <h1>{t('app.name')}</h1>
         <button className="btn" onClick={() => navigate('/stats')}>
-          Stats
+          {t('nav.stats')}
         </button>
         <button className="btn" onClick={() => navigate('/highlights')}>
-          Highlights
+          {t('nav.highlights')}
         </button>
         <button className="btn" onClick={() => navigate('/settings')}>
-          Settings
+          {t('nav.settings')}
         </button>
         <button
           className="btn btn-primary"
           onClick={() => fileInput.current?.click()}
           disabled={importing}
         >
-          {importing ? 'Importing…' : 'Add book'}
+          {importing ? t('library.importing') : t('library.add')}
         </button>
         <input
           ref={fileInput}
@@ -180,14 +181,14 @@ export function LibraryScreen() {
           <p className="muted">Loading library…</p>
         ) : books.length === 0 ? (
           <div className="empty-state">
-            <h2>Your library is empty</h2>
-            <p>Add an EPUB or text file to start reading.</p>
+            <h2>{t('library.empty.title')}</h2>
+            <p>{t('library.empty.body')}</p>
           </div>
         ) : (
           <>
             {recent.length > 0 && !search && statusFilter === 'all' && !collectionFilter && (
               <section>
-                <h2 className="row-title">Continue reading</h2>
+                <h2 className="row-title">{t('library.continue')}</h2>
                 <div className="book-row">
                   {recent.map((book) => (
                     <BookCard
@@ -205,7 +206,7 @@ export function LibraryScreen() {
               </section>
             )}
 
-            <h2 className="row-title">All books</h2>
+            <h2 className="row-title">{t('library.all')}</h2>
             <div className="library-grid">
               {visible.map((book) => (
                 <BookCard

@@ -6,16 +6,26 @@ app, and an iOS app.
 
 ## Features
 
-- **Library** — import EPUB and text/Markdown files, stored locally in IndexedDB.
-- **Reader** — paginated EPUB rendering (epub.js) with chapter navigation.
-- **Bookmarks** — save and jump to positions (EPUB CFI based).
-- **Highlights** — select text and highlight in five colors; persisted and
-  re-applied on reopen.
-- **Text to speech** — read-aloud with a pluggable engine layer. Ships with the
-  always-available system voice and an **on-device Supertonic** neural engine
-  (onnxruntime-web, WebGPU with WebAssembly fallback).
+- **Library** — import EPUB, MOBI/AZW3, PDF and text/Markdown, stored locally
+  in IndexedDB. Collections/shelves, tags, reading status, search, sort/filter
+  and a "Continue reading" row.
+- **Reader** — paginated or scrolled layout, chapter navigation, tap/drag the
+  progress bar to jump to any percentage, in-book full-text search, brightness
+  and warmth controls, justify toggle.
+- **Bookmarks & highlights** — five colors, notes on highlights, an all-books
+  highlights view with color filtering and Markdown/JSON export.
+- **Text to speech** — pluggable engine layer with the always-available system
+  voice and an **on-device Supertonic** neural engine (onnxruntime-web, WebGPU
+  with WebAssembly fallback). Read-along sentence highlighting with auto-scroll,
+  tap/select "read from here", continuous narration across chapters, sentence/
+  paragraph granularity, sleep timer, lock-screen controls, per-book voice memory.
+- **Reading stats** — time, day streak, sessions and a last-7-days chart.
+- **Backup & sync** — export/import the whole library (books, annotations,
+  progress, shelves) as a single .zip, behind a swappable sync-provider interface.
 - **Modular themes & fonts** — token-based theming designed for extension from
   day one. Swap or add themes and fonts without touching components.
+- **PWA + native** — installable offline web app; status-bar theming and
+  haptics on native via Capacitor.
 
 ## Architecture
 

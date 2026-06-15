@@ -37,6 +37,7 @@ export function isFormatSupported(format: BookFormat): boolean {
 const EXTENSION_FORMATS: Record<string, BookFormat> = {
   epub: 'epub',
   mobi: 'mobi',
+  azw: 'mobi',
   azw3: 'azw3',
   txt: 'text',
   text: 'text',

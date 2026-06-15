@@ -8,6 +8,7 @@ import { TtsBar } from './reader/TtsBar'
 import { ReaderPanel } from './reader/ReaderPanel'
 import { useSettingsStore } from '@/store/settingsStore'
 import { bookSettingsRepository } from '@/storage/bookSettingsRepository'
+import { hapticTick } from '@/lib/native'
 
 export function ReaderScreen() {
   const { bookId = '' } = useParams()
@@ -103,6 +104,12 @@ export function ReaderScreen() {
     reader.goToPercentage((event.clientX - rect.left) / rect.width)
   }
 
+  const turn = (dir: 'next' | 'prev') => {
+    void hapticTick()
+    if (dir === 'next') reader.next()
+    else reader.prev()
+  }
+
   if (reader.status === 'error') {
     return (
       <div className="app">
@@ -167,13 +174,15 @@ export function ReaderScreen() {
 
         <div
           className="reader-tap-zone left"
-          onClick={reader.prev}
+          style={{ width: reading.largeTapZones ? '30%' : '22%' }}
+          onClick={() => turn('prev')}
           role="button"
           aria-label="Previous page"
         />
         <div
           className="reader-tap-zone right"
-          onClick={reader.next}
+          style={{ width: reading.largeTapZones ? '30%' : '22%' }}
+          onClick={() => turn('next')}
           role="button"
           aria-label="Next page"
         />

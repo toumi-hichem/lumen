@@ -8,6 +8,19 @@
   min-height: 100dvh;
 }
 
+/* Respect the OS "reduce motion" setting for accessibility. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.reader-viewport {
+  contain: layout style;
+}
+
 .appbar {
   display: flex;
   align-items: center;
