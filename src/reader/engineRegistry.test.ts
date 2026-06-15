@@ -15,17 +15,24 @@ describe('engineRegistry', () => {
     expect(detectFormat('weird.unknown')).toBe('text')
   })
 
-  it('reports EPUB and text as supported, MOBI as not yet', () => {
+  it('reports the implemented formats as supported', () => {
     expect(isFormatSupported('epub')).toBe(true)
     expect(isFormatSupported('text')).toBe(true)
-    expect(isFormatSupported('mobi')).toBe(false)
+    expect(isFormatSupported('mobi')).toBe(true)
+    expect(isFormatSupported('azw3')).toBe(true)
+    expect(isFormatSupported('pdf')).toBe(true)
   })
 
-  it('throws UnsupportedFormatError for engines not yet implemented', () => {
-    expect(() => createEngine('mobi')).toThrow(UnsupportedFormatError)
+  it('throws UnsupportedFormatError for unregistered formats', () => {
+    expect(() => createEngine('xps' as unknown as Parameters<typeof createEngine>[0])).toThrow(
+      UnsupportedFormatError,
+    )
   })
 
-  it('creates an EPUB engine for the epub format', () => {
+  it('creates engines matching the requested format', () => {
     expect(createEngine('epub').format).toBe('epub')
+    expect(createEngine('mobi').format).toBe('mobi')
+    expect(createEngine('azw3').format).toBe('azw3')
+    expect(createEngine('pdf').format).toBe('pdf')
   })
 })

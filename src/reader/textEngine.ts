@@ -36,9 +36,20 @@ export class TextEngine implements BookEngine {
   private readonly highlights = new Map<string, HighlightColor>()
   private theme: ReaderTheme | null = null
   private spans: ChunkSpan[] = []
+  private asHtml = false
 
   async open(data: ArrayBuffer): Promise<void> {
     this.text = new TextDecoder('utf-8').decode(data)
+  }
+
+  /**
+   * Inject pre-extracted content directly (used by the MOBI engine, which
+   * reuses this engine's reflow/TTS/highlight machinery). `asHtml` renders the
+   * value as HTML; otherwise it is treated as preformatted plain text.
+   */
+  setContent(value: string, asHtml = false): void {
+    this.text = value
+    this.asHtml = asHtml
   }
 
   async renderTo(element: HTMLElement): Promise<void> {
@@ -46,8 +57,12 @@ export class TextEngine implements BookEngine {
     element.innerHTML = ''
     const content = document.createElement('div')
     content.className = 'text-engine-content'
-    content.textContent = this.text
-    content.style.whiteSpace = 'pre-wrap'
+    if (this.asHtml) {
+      content.innerHTML = this.text
+    } else {
+      content.textContent = this.text
+      content.style.whiteSpace = 'pre-wrap'
+    }
     content.style.maxWidth = '42rem'
     content.style.margin = '0 auto'
     element.style.overflow = 'auto'
@@ -119,7 +134,7 @@ export class TextEngine implements BookEngine {
   async search(query: string, limit = 100): Promise<SearchHit[]> {
     const term = query.trim()
     if (term.length < 2) return []
-    const haystack = this.text
+    const haystack = this.plainText()
     const lower = haystack.toLowerCase()
     const needle = term.toLowerCase()
     const hits: SearchHit[] = []
@@ -169,7 +184,12 @@ export class TextEngine implements BookEngine {
   }
 
   async getCurrentSectionText(): Promise<string[]> {
-    return chunkText(this.text)
+    return chunkText(this.plainText())
+  }
+
+  /** Rendered text content (strips HTML tags in MOBI/HTML mode). */
+  private plainText(): string {
+    return this.content?.textContent ?? this.text
   }
 
   async getSpeakableChunks(maxChars = 240): Promise<SpeakableChunk[]> {

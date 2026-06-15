@@ -108,7 +108,7 @@ export function LibraryScreen() {
         <input
           ref={fileInput}
           type="file"
-          accept=".epub,.txt,.md,.markdown,application/epub+zip,text/plain"
+          accept=".epub,.txt,.md,.markdown,.mobi,.azw3,.pdf,application/epub+zip,application/pdf,text/plain"
           multiple
           hidden
           onChange={onPick}

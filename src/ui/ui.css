@@ -272,6 +272,17 @@
   z-index: 4;
 }
 
+.pdf-page {
+  min-height: 600px;
+  margin: 0 auto 12px;
+  max-width: 900px;
+  display: flex;
+  justify-content: center;
+}
+.pdf-page canvas {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+}
+
 .reader-progress {
   height: 8px;
   background: var(--color-surface-alt);

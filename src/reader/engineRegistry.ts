@@ -1,6 +1,8 @@
 import type { BookFormat } from '@/domain/models'
 import { EpubEngine } from './epubEngine'
 import { TextEngine } from './textEngine'
+import { MobiEngine } from './mobiEngine'
+import { PdfEngine } from './pdfEngine'
 import { type BookEngine, UnsupportedFormatError } from './types'
 
 type EngineFactory = () => BookEngine
@@ -13,6 +15,9 @@ type EngineFactory = () => BookEngine
 const factories = new Map<BookFormat, EngineFactory>([
   ['epub', () => new EpubEngine()],
   ['text', () => new TextEngine()],
+  ['mobi', () => new MobiEngine('mobi')],
+  ['azw3', () => new MobiEngine('azw3')],
+  ['pdf', () => new PdfEngine()],
 ])
 
 export function registerEngine(format: BookFormat, factory: EngineFactory): void {
