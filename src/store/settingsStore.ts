@@ -3,6 +3,9 @@ import { loadJson, saveJson } from './persist'
 
 const SETTINGS_KEY = 'lumen.settings.v1'
 
+export type ReaderFlow = 'paginated' | 'scrolled'
+export type TtsGranularity = 'sentence' | 'paragraph'
+
 export interface ReadingPreferences {
   themeId: string
   fontId: string
@@ -12,6 +15,14 @@ export interface ReadingPreferences {
   lineHeight: number
   /** Horizontal page margin in pixels. */
   margin: number
+  /** Paginated (page-turn) vs scrolled (continuous) layout. */
+  flow: ReaderFlow
+  /** Justify body text. */
+  justify: boolean
+  /** Screen dimming overlay, 0.4 (dim) to 1 (full brightness). */
+  brightness: number
+  /** Warm/sepia overlay strength, 0 (off) to 1. */
+  warmth: number
 }
 
 export interface TtsPreferences {
@@ -20,6 +31,10 @@ export interface TtsPreferences {
   /** Speech rate multiplier, 0.5–2.0. */
   rate: number
   pitch: number
+  /** Chunking granularity for read-aloud. */
+  granularity: TtsGranularity
+  /** Continue narration into the next chapter automatically. */
+  autoAdvance: boolean
 }
 
 export interface AppSettings {
@@ -34,12 +49,18 @@ export const defaultSettings: AppSettings = {
     fontScale: 1,
     lineHeight: 1.6,
     margin: 24,
+    flow: 'paginated',
+    justify: false,
+    brightness: 1,
+    warmth: 0,
   },
   tts: {
     engineId: 'web-speech',
     voiceId: '',
     rate: 1,
     pitch: 1,
+    granularity: 'sentence',
+    autoAdvance: true,
   },
 }
 

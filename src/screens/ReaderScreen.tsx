@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useReader } from './reader/useReader'
 import { useTts } from './reader/useTts'
@@ -6,15 +6,42 @@ import { useReadAlong } from './reader/useReadAlong'
 import { SelectionMenu } from './reader/SelectionMenu'
 import { TtsBar } from './reader/TtsBar'
 import { ReaderPanel } from './reader/ReaderPanel'
+import { useSettingsStore } from '@/store/settingsStore'
+import { bookSettingsRepository } from '@/storage/bookSettingsRepository'
 
 export function ReaderScreen() {
   const { bookId = '' } = useParams()
   const navigate = useNavigate()
   const reader = useReader(bookId)
-  const tts = useTts()
+  const ttsPrefs = useSettingsStore((s) => s.tts)
+  const setTts = useSettingsStore((s) => s.setTts)
+  const reading = useSettingsStore((s) => s.reading)
   const [panelOpen, setPanelOpen] = useState(false)
 
-  // Highlight + scroll to the chunk currently being spoken.
+  const maxChars = ttsPrefs.granularity === 'paragraph' ? 1200 : 240
+
+  // onComplete is read through a ref so the controller (created once) always
+  // runs the latest auto-advance closure with access to reader + tts.
+  const advanceRef = useRef<() => void>(() => {})
+
+  const tts = useTts({
+    bookTitle: reader.book?.title,
+    author: reader.book?.author,
+    onComplete: () => advanceRef.current(),
+    onNext: () => void reader.next(),
+    onPrev: () => void reader.prev(),
+  })
+
+  advanceRef.current = async () => {
+    if (!ttsPrefs.autoAdvance) return
+    await reader.next()
+    // Let the next section render before extracting its chunks.
+    await new Promise((r) => setTimeout(r, 500))
+    const chunks = await reader.getSpeakableChunks(maxChars)
+    if (chunks.length) tts.start(chunks)
+  }
+
+  // Read-along: highlight + scroll to the spoken chunk.
   useReadAlong({
     status: tts.status,
     chunkIndex: tts.chunkIndex,
@@ -23,16 +50,43 @@ export function ReaderScreen() {
     clear: reader.clearSpokenHighlight,
   })
 
-  const startReadAloud = async () => {
-    const chunks = await reader.getSpeakableChunks()
-    if (chunks.length) tts.start(chunks)
+  // Per-book voice memory: recall the voice/engine/rate last used for this book.
+  useEffect(() => {
+    const id = reader.book?.id
+    if (!id) return
+    void bookSettingsRepository.get(id).then((saved) => {
+      if (!saved) return
+      setTts({
+        ...(saved.ttsEngineId ? { engineId: saved.ttsEngineId } : {}),
+        ...(saved.ttsVoiceId !== undefined ? { voiceId: saved.ttsVoiceId } : {}),
+        ...(saved.ttsRate ? { rate: saved.ttsRate } : {}),
+      })
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reader.book?.id])
+
+  const rememberVoice = () => {
+    if (!reader.book) return
+    void bookSettingsRepository.save({
+      bookId: reader.book.id,
+      ttsEngineId: ttsPrefs.engineId,
+      ttsVoiceId: ttsPrefs.voiceId,
+      ttsRate: ttsPrefs.rate,
+    })
   }
 
-  // Start read-aloud from the chunk matching the current text selection.
+  const startReadAloud = async () => {
+    const chunks = await reader.getSpeakableChunks(maxChars)
+    if (chunks.length) {
+      tts.start(chunks)
+      rememberVoice()
+    }
+  }
+
   const readFromSelection = async () => {
     const text = reader.selection?.text
     reader.clearSelection()
-    const chunks = await reader.getSpeakableChunks()
+    const chunks = await reader.getSpeakableChunks(maxChars)
     if (!chunks.length) return
     let index = 0
     if (text) {
@@ -41,6 +95,12 @@ export function ReaderScreen() {
       if (found >= 0) index = found
     }
     tts.start(chunks, index)
+    rememberVoice()
+  }
+
+  const seek = (event: React.MouseEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    reader.goToPercentage((event.clientX - rect.left) / rect.width)
   }
 
   if (reader.status === 'error') {
@@ -59,37 +119,52 @@ export function ReaderScreen() {
     )
   }
 
+  const dimOpacity = 1 - Math.max(0.4, Math.min(1, reading.brightness))
+  const warmOpacity = Math.max(0, Math.min(1, reading.warmth)) * 0.4
+
   return (
     <div className="reader">
       <header className="appbar">
         <button className="btn" onClick={() => navigate('/')} aria-label="Back to library">
           ←
         </button>
-        <button className="btn" onClick={() => setPanelOpen(true)}>
+        <button className="btn" onClick={() => setPanelOpen(true)} aria-label="Open menu">
           ☰
         </button>
-        <h1 style={{ fontSize: 15 }}>
-          {reader.book?.title ?? 'Loading…'}
-        </h1>
+        <h1 style={{ fontSize: 15 }}>{reader.book?.title ?? 'Loading…'}</h1>
         <button
           className="btn"
           onClick={reader.addBookmark}
           disabled={!reader.location}
           aria-label="Add bookmark"
         >
-          ＋ Bookmark
+          ＋
         </button>
-        <button className="btn" onClick={() => navigate('/settings')}>
+        <button className="btn" onClick={() => navigate('/settings')} aria-label="Settings">
           Aa
         </button>
       </header>
 
       <div className="reader-viewport">
-        <div
-          ref={reader.containerRef}
-          style={{ position: 'absolute', inset: 0 }}
-        />
-        {/* Tap zones for page turns (EPUB paginated flow). */}
+        <div ref={reader.containerRef} style={{ position: 'absolute', inset: 0 }} />
+
+        {/* Reading-comfort overlays (do not capture input). */}
+        {dimOpacity > 0 && (
+          <div
+            className="reader-overlay"
+            style={{ background: `rgba(0,0,0,${dimOpacity})` }}
+          />
+        )}
+        {warmOpacity > 0 && (
+          <div
+            className="reader-overlay"
+            style={{
+              background: `rgba(255,147,41,${warmOpacity})`,
+              mixBlendMode: 'multiply',
+            }}
+          />
+        )}
+
         <div
           className="reader-tap-zone left"
           onClick={reader.prev}
@@ -123,7 +198,14 @@ export function ReaderScreen() {
         )}
       </div>
 
-      <div className="reader-progress" aria-hidden>
+      <div
+        className="reader-progress"
+        onClick={seek}
+        role="slider"
+        aria-label="Reading position"
+        aria-valuenow={Math.round((reader.location?.progress ?? 0) * 100)}
+        tabIndex={0}
+      >
         <span style={{ width: `${(reader.location?.progress ?? 0) * 100}%` }} />
       </div>
 
@@ -131,10 +213,12 @@ export function ReaderScreen() {
         status={tts.status}
         engineId={tts.activeEngineId}
         error={tts.error}
+        sleepMinutes={tts.sleepMinutes}
         onPlay={() => void startReadAloud()}
         onPause={tts.pause}
         onResume={tts.resume}
         onStop={tts.stop}
+        onSetSleep={tts.setSleepTimer}
       />
 
       {panelOpen && (
@@ -143,8 +227,10 @@ export function ReaderScreen() {
           bookmarks={reader.bookmarks}
           highlights={reader.highlights}
           onNavigate={reader.goTo}
+          onSearch={reader.search}
           onRemoveBookmark={reader.removeBookmark}
           onRemoveHighlight={reader.removeHighlight}
+          onEditHighlightNote={reader.setHighlightNote}
           onClose={() => setPanelOpen(false)}
         />
       )}

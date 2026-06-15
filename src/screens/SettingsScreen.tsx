@@ -90,6 +90,52 @@ export function SettingsScreen() {
             value={reading.margin}
             onChange={(margin) => setReading({ margin })}
           />
+          <Slider
+            label={`Brightness — ${Math.round(reading.brightness * 100)}%`}
+            min={0.4}
+            max={1}
+            step={0.05}
+            value={reading.brightness}
+            onChange={(brightness) => setReading({ brightness })}
+          />
+          <Slider
+            label={`Warmth — ${Math.round(reading.warmth * 100)}%`}
+            min={0}
+            max={1}
+            step={0.05}
+            value={reading.warmth}
+            onChange={(warmth) => setReading({ warmth })}
+          />
+        </section>
+
+        <section className="settings-section">
+          <h2>Layout</h2>
+          <div className="setting-row">
+            <span>Page mode</span>
+            <div className="font-options">
+              <button
+                className={`chip ${reading.flow === 'paginated' ? 'active' : ''}`}
+                onClick={() => setReading({ flow: 'paginated' })}
+              >
+                Paginated
+              </button>
+              <button
+                className={`chip ${reading.flow === 'scrolled' ? 'active' : ''}`}
+                onClick={() => setReading({ flow: 'scrolled' })}
+              >
+                Scrolled
+              </button>
+            </div>
+          </div>
+          <div className="setting-row">
+            <span>Justify text</span>
+            <button
+              className={`chip ${reading.justify ? 'active' : ''}`}
+              onClick={() => setReading({ justify: !reading.justify })}
+            >
+              {reading.justify ? 'On' : 'Off'}
+            </button>
+          </div>
         </section>
 
         <section className="settings-section">
@@ -142,6 +188,32 @@ export function SettingsScreen() {
             value={tts.pitch}
             onChange={(pitch) => setTts({ pitch })}
           />
+          <div className="setting-row">
+            <span>Read by</span>
+            <div className="font-options">
+              <button
+                className={`chip ${tts.granularity === 'sentence' ? 'active' : ''}`}
+                onClick={() => setTts({ granularity: 'sentence' })}
+              >
+                Sentence
+              </button>
+              <button
+                className={`chip ${tts.granularity === 'paragraph' ? 'active' : ''}`}
+                onClick={() => setTts({ granularity: 'paragraph' })}
+              >
+                Paragraph
+              </button>
+            </div>
+          </div>
+          <div className="setting-row">
+            <span>Continue to next chapter</span>
+            <button
+              className={`chip ${tts.autoAdvance ? 'active' : ''}`}
+              onClick={() => setTts({ autoAdvance: !tts.autoAdvance })}
+            >
+              {tts.autoAdvance ? 'On' : 'Off'}
+            </button>
+          </div>
           <p className="muted" style={{ fontSize: 12 }}>
             Supertonic runs fully on-device. Drop its model assets into
             <code> public/supertonic</code> (see scripts/fetch-supertonic.sh) to

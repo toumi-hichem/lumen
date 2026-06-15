@@ -19,5 +19,6 @@ export function buildReaderTheme(
     fontSizePercent: Math.round(reading.fontScale * 100),
     lineHeight: reading.lineHeight,
     margin: reading.margin,
+    justify: reading.justify,
   }
 }

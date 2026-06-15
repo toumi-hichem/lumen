@@ -3,6 +3,8 @@
 
 export type BookFormat = 'epub' | 'mobi' | 'azw3' | 'text' | 'pdf'
 
+export type BookStatus = 'unread' | 'reading' | 'finished'
+
 export interface Book {
   readonly id: string
   readonly title: string
@@ -16,6 +18,34 @@ export interface Book {
   readonly language?: string
   readonly addedAt: number
   readonly lastOpenedAt?: number
+  readonly status?: BookStatus
+  readonly tags?: readonly string[]
+  readonly collectionIds?: readonly string[]
+}
+
+/** A user-defined shelf/collection grouping books. */
+export interface Collection {
+  readonly id: string
+  readonly name: string
+  readonly createdAt: number
+}
+
+/** Per-book overrides that should not affect global defaults. */
+export interface BookSettings {
+  readonly bookId: string
+  readonly ttsVoiceId?: string
+  readonly ttsEngineId?: string
+  readonly ttsRate?: number
+}
+
+/** A reading session for stats (time spent, pages, streaks). */
+export interface ReadingSession {
+  readonly id: string
+  readonly bookId: string
+  readonly startedAt: number
+  readonly endedAt: number
+  /** Milliseconds of active reading. */
+  readonly durationMs: number
 }
 
 /**

@@ -54,6 +54,8 @@ export interface ReaderTheme {
   lineHeight: number
   /** Horizontal margin in pixels. */
   margin: number
+  /** Justify body text. */
+  justify: boolean
 }
 
 /**
@@ -73,6 +75,14 @@ export interface BookEngine {
 
   next(): Promise<void>
   prev(): Promise<void>
+  /** Jump to a fraction (0..1) through the whole book. */
+  goToPercentage(percentage: number): Promise<void>
+
+  /** Set layout mode. Takes effect on the next render for some engines. */
+  setFlow(flow: 'paginated' | 'scrolled'): void
+
+  /** Full-text search across the book. Capped at `limit` hits. */
+  search(query: string, limit?: number): Promise<SearchHit[]>
 
   applyTheme(theme: ReaderTheme): void
 
@@ -101,7 +111,7 @@ export interface BookEngine {
    * Speakable chunks for the current section WITH positional anchors, so the
    * reader can highlight/scroll to the spoken chunk and start from a tap.
    */
-  getSpeakableChunks(): Promise<SpeakableChunk[]>
+  getSpeakableChunks(maxChars?: number): Promise<SpeakableChunk[]>
 
   /** Highlight a spoken chunk and scroll/page it into view (read-along). */
   locateChunk(chunk: SpeakableChunk): void

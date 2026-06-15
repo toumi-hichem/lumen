@@ -5,6 +5,7 @@ import ePub, {
   type Location,
   type NavItem,
 } from 'epubjs'
+import type Section from 'epubjs/types/section'
 import type { HighlightColor } from '@/domain/models'
 import { chunkText } from '@/lib/textChunk'
 import { collectTextNodes, domToChunks, locationToOffset } from '@/lib/domChunk'
@@ -12,6 +13,7 @@ import {
   type BookEngine,
   type BookLocationInfo,
   type ReaderTheme,
+  type SearchHit,
   type SelectionInfo,
   type SpeakableChunk,
   type TocItem,
@@ -41,6 +43,7 @@ export class EpubEngine implements BookEngine {
   private spans: ChunkSpan[] = []
   private readalongCfi: string | null = null
   private readalongColor = 'rgba(255, 213, 0, 0.4)'
+  private flow: 'paginated' | 'scrolled' = 'paginated'
 
   async open(data: ArrayBuffer): Promise<void> {
     this.book = ePub(data)
@@ -56,7 +59,7 @@ export class EpubEngine implements BookEngine {
     this.rendition = this.book.renderTo(element, {
       width: '100%',
       height: '100%',
-      flow: 'paginated',
+      flow: this.flow === 'scrolled' ? 'scrolled-doc' : 'paginated',
       spread: 'auto',
       allowScriptedContent: false,
     })
@@ -96,11 +99,54 @@ export class EpubEngine implements BookEngine {
     await this.rendition?.prev()
   }
 
+  async goToPercentage(percentage: number): Promise<void> {
+    if (!this.book || !this.rendition) return
+    const cfi = this.book.locations.cfiFromPercentage(
+      Math.max(0, Math.min(1, percentage)),
+    )
+    if (cfi) await this.rendition.display(cfi)
+  }
+
+  setFlow(flow: 'paginated' | 'scrolled'): void {
+    this.flow = flow
+  }
+
+  async search(query: string, limit = 60): Promise<SearchHit[]> {
+    const term = query.trim()
+    if (!this.book || term.length < 2) return []
+    const spine = this.book.spine as unknown as { spineItems?: Section[] }
+    const sections = spine.spineItems ?? []
+    const loader = this.book.load.bind(this.book)
+    const hits: SearchHit[] = []
+
+    for (const section of sections) {
+      if (hits.length >= limit) break
+      try {
+        await Promise.resolve(section.load(loader))
+        const found = section.find(term) as unknown as Array<{
+          cfi: string
+          excerpt: string
+        }>
+        const title = this.chapterTitleFor(section.href)
+        for (const f of found) {
+          hits.push({ anchor: f.cfi, excerpt: f.excerpt.trim(), chapterTitle: title })
+          if (hits.length >= limit) break
+        }
+      } catch {
+        // Skip sections that fail to load.
+      } finally {
+        section.unload()
+      }
+    }
+    return hits
+  }
+
   applyTheme(theme: ReaderTheme): void {
     this.lastTheme = theme
     this.readalongColor = theme.readalongBackground
     if (!this.rendition) return
 
+    const textAlign = theme.justify ? 'justify' : 'start'
     this.rendition.themes.register(THEME_NAME, {
       body: {
         background: `${theme.pageBackground} !important`,
@@ -108,8 +154,12 @@ export class EpubEngine implements BookEngine {
         'font-family': `${theme.fontFamily} !important`,
         'line-height': `${theme.lineHeight} !important`,
         'padding': `0 ${theme.margin}px !important`,
+        'text-align': `${textAlign} !important`,
       },
-      p: { 'line-height': `${theme.lineHeight} !important` },
+      p: {
+        'line-height': `${theme.lineHeight} !important`,
+        'text-align': `${textAlign} !important`,
+      },
       a: { color: `${theme.pageLink} !important` },
       '::selection': { background: theme.vars['--reader-selection-background'] },
     })
@@ -162,7 +212,7 @@ export class EpubEngine implements BookEngine {
     return chunkText(text)
   }
 
-  async getSpeakableChunks(): Promise<SpeakableChunk[]> {
+  async getSpeakableChunks(maxChars = 240): Promise<SpeakableChunk[]> {
     if (!this.rendition) return []
     this.spans = []
     const result: SpeakableChunk[] = []
@@ -171,7 +221,7 @@ export class EpubEngine implements BookEngine {
       const body = c.document?.body
       if (!body) continue
       const entries = collectTextNodes(body)
-      for (const dc of domToChunks(body)) {
+      for (const dc of domToChunks(body, maxChars)) {
         const range = c.document.createRange()
         range.setStart(dc.startNode, dc.startOffset)
         range.setEnd(dc.endNode, dc.endOffset)

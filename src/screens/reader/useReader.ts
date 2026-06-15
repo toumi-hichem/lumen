@@ -11,6 +11,7 @@ import { createEngine } from '@/reader/engineRegistry'
 import type {
   BookEngine,
   BookLocationInfo,
+  SearchHit,
   SelectionInfo,
   SpeakableChunk,
   TocItem,
@@ -43,11 +44,16 @@ export interface ReaderApi {
   removeBookmark: (id: string) => void
   addHighlight: (color: HighlightColor) => void
   removeHighlight: (id: string) => void
+  setHighlightNote: (id: string, note: string) => void
   clearSelection: () => void
   /** Plain-text of the current section, chunked for read-aloud. */
   getSectionText: () => Promise<string[]>
   /** Anchored speakable chunks for read-along + tap-to-start. */
-  getSpeakableChunks: () => Promise<SpeakableChunk[]>
+  getSpeakableChunks: (maxChars?: number) => Promise<SpeakableChunk[]>
+  /** Jump to a fraction (0..1) through the book. */
+  goToPercentage: (p: number) => void
+  /** Full-text search across the book. */
+  search: (query: string) => Promise<SearchHit[]>
   /** Highlight + scroll to a spoken chunk (read-along). */
   locateChunk: (chunk: SpeakableChunk) => void
   /** Remove the read-along highlight. */
@@ -91,6 +97,7 @@ export function useReader(bookId: string): ReaderApi {
         if (!blob) throw new Error('Book file is missing')
 
         const engine = createEngine(loaded.format)
+        engine.setFlow(reading.flow)
         await engine.open(await blob.arrayBuffer())
         if (!active) return engine.destroy()
 
@@ -144,8 +151,9 @@ export function useReader(bookId: string): ReaderApi {
       engineRef.current?.destroy()
       engineRef.current = null
     }
+    // Re-mount when the layout mode changes; saved position is restored.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bookId])
+  }, [bookId, reading.flow])
 
   // Re-theme the reader surface when theme / typography preferences change.
   useEffect(() => {
@@ -170,7 +178,16 @@ export function useReader(bookId: string): ReaderApi {
   const getSectionText = () =>
     engineRef.current?.getCurrentSectionText() ?? Promise.resolve([])
   const getSpeakableChunks = useCallback(
-    () => engineRef.current?.getSpeakableChunks() ?? Promise.resolve([]),
+    (maxChars?: number) =>
+      engineRef.current?.getSpeakableChunks(maxChars) ?? Promise.resolve([]),
+    [],
+  )
+  const goToPercentage = useCallback(
+    (p: number) => void engineRef.current?.goToPercentage(p),
+    [],
+  )
+  const search = useCallback(
+    (query: string) => engineRef.current?.search(query) ?? Promise.resolve([]),
     [],
   )
   const locateChunk = useCallback(
@@ -232,6 +249,14 @@ export function useReader(bookId: string): ReaderApi {
     setHighlights((prev) => prev.filter((h) => h.id !== id))
   }
 
+  const setHighlightNote = (id: string, note: string) => {
+    const target = highlights.find((h) => h.id === id)
+    if (!target) return
+    const updated: Highlight = { ...target, note }
+    void highlightRepository.save(updated)
+    setHighlights((prev) => prev.map((h) => (h.id === id ? updated : h)))
+  }
+
   return {
     status,
     error,
@@ -249,9 +274,12 @@ export function useReader(bookId: string): ReaderApi {
     removeBookmark,
     addHighlight,
     removeHighlight,
+    setHighlightNote,
     clearSelection,
     getSectionText,
     getSpeakableChunks,
+    goToPercentage,
+    search,
     locateChunk,
     clearSpokenHighlight,
     chunkAtPoint,

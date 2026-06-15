@@ -11,6 +11,8 @@ export interface TtsControllerEvents {
   onError?: (message: string) => void
   /** Engine actually in use after any fallback (may differ from requested). */
   onEngineResolved?: (engineId: string) => void
+  /** Fired only when all chunks finished naturally (not on stop/pause). */
+  onComplete?: () => void
 }
 
 /**
@@ -111,6 +113,7 @@ export class TtsController {
     }
     this.index = 0
     this.setStatus('idle')
+    this.events.onComplete?.()
   }
 
   private async initEngineWithFallback(id: string): Promise<string> {

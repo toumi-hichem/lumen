@@ -120,9 +120,25 @@
 .reader-tap-zone.left { left: 0; }
 .reader-tap-zone.right { right: 0; }
 
+.reader-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+
 .reader-progress {
-  height: 3px;
+  height: 8px;
   background: var(--color-surface-alt);
+  cursor: pointer;
+}
+
+.hl-note {
+  margin-top: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+  background: var(--color-surface-alt);
+  border-radius: var(--radius-sm);
 }
 .reader-progress > span {
   display: block;

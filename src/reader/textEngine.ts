@@ -5,6 +5,7 @@ import {
   type BookEngine,
   type BookLocationInfo,
   type ReaderTheme,
+  type SearchHit,
   type SelectionInfo,
   type SpeakableChunk,
   type TocItem,
@@ -68,6 +69,16 @@ export class TextEngine implements BookEngine {
       const fraction = Number(target.slice('text:'.length)) || 0
       this.container.scrollTop =
         fraction * (this.container.scrollHeight - this.container.clientHeight)
+    } else if (target?.startsWith('text-range:') && this.content) {
+      // Used by bookmarks, highlights and search hits.
+      const parsed = parseTextRange(target)
+      const range = parsed && rangeFromOffsets(this.content, parsed.start, parsed.end)
+      if (range) {
+        const cRect = this.container.getBoundingClientRect()
+        const rRect = range.getBoundingClientRect()
+        this.container.scrollTop +=
+          rRect.top - cRect.top - this.container.clientHeight / 3
+      }
     }
     this.emitLocation()
   }
@@ -91,6 +102,40 @@ export class TextEngine implements BookEngine {
     this.content.style.fontSize = `${theme.fontSizePercent}%`
     this.content.style.lineHeight = String(theme.lineHeight)
     this.content.style.padding = `${theme.margin}px`
+    this.content.style.textAlign = theme.justify ? 'justify' : 'start'
+  }
+
+  async goToPercentage(percentage: number): Promise<void> {
+    if (!this.container) return
+    const clamped = Math.max(0, Math.min(1, percentage))
+    this.container.scrollTop =
+      clamped * (this.container.scrollHeight - this.container.clientHeight)
+    this.emitLocation()
+  }
+
+  /** The text engine is always continuous; flow is a no-op. */
+  setFlow(): void {}
+
+  async search(query: string, limit = 100): Promise<SearchHit[]> {
+    const term = query.trim()
+    if (term.length < 2) return []
+    const haystack = this.text
+    const lower = haystack.toLowerCase()
+    const needle = term.toLowerCase()
+    const hits: SearchHit[] = []
+    let from = 0
+    while (hits.length < limit) {
+      const at = lower.indexOf(needle, from)
+      if (at === -1) break
+      const start = Math.max(0, at - 30)
+      const end = Math.min(haystack.length, at + term.length + 40)
+      hits.push({
+        anchor: `text-range:${at}-${at + term.length}`,
+        excerpt: `…${haystack.slice(start, end).replace(/\s+/g, ' ').trim()}…`,
+      })
+      from = at + term.length
+    }
+    return hits
   }
 
   getLocation(): BookLocationInfo | null {
@@ -127,12 +172,12 @@ export class TextEngine implements BookEngine {
     return chunkText(this.text)
   }
 
-  async getSpeakableChunks(): Promise<SpeakableChunk[]> {
+  async getSpeakableChunks(maxChars = 240): Promise<SpeakableChunk[]> {
     if (!this.content) return []
     this.spans = []
     const result: SpeakableChunk[] = []
     let index = 0
-    for (const dc of domToChunks(this.content)) {
+    for (const dc of domToChunks(this.content, maxChars)) {
       const start = globalOffset(this.content, dc.startNode, dc.startOffset)
       const end = globalOffset(this.content, dc.endNode, dc.endOffset)
       const chunk: SpeakableChunk = {
