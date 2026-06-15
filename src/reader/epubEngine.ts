@@ -7,15 +7,25 @@ import ePub, {
 } from 'epubjs'
 import type { HighlightColor } from '@/domain/models'
 import { chunkText } from '@/lib/textChunk'
+import { collectTextNodes, domToChunks, locationToOffset } from '@/lib/domChunk'
 import {
   type BookEngine,
   type BookLocationInfo,
   type ReaderTheme,
   type SelectionInfo,
+  type SpeakableChunk,
   type TocItem,
 } from './types'
 
 const THEME_NAME = 'lumen'
+const READALONG_CLASS = 'lumen-readalong'
+
+interface ChunkSpan {
+  chunk: SpeakableChunk
+  /** Global character offsets within the section, for tap-to-start mapping. */
+  start: number
+  end: number
+}
 
 /** EPUB reader engine backed by epub.js. */
 export class EpubEngine implements BookEngine {
@@ -28,6 +38,9 @@ export class EpubEngine implements BookEngine {
   private locationCb: ((loc: BookLocationInfo) => void) | null = null
   private selectionCb: ((sel: SelectionInfo) => void) | null = null
   private lastTheme: ReaderTheme | null = null
+  private spans: ChunkSpan[] = []
+  private readalongCfi: string | null = null
+  private readalongColor = 'rgba(255, 213, 0, 0.4)'
 
   async open(data: ArrayBuffer): Promise<void> {
     this.book = ePub(data)
@@ -57,6 +70,8 @@ export class EpubEngine implements BookEngine {
         progress,
         chapterTitle: this.chapterTitleFor(loc.start.href),
       }
+      // Chunk anchors are section-relative; invalidate on navigation.
+      this.spans = []
       this.locationCb?.(this.location)
     })
 
@@ -83,6 +98,7 @@ export class EpubEngine implements BookEngine {
 
   applyTheme(theme: ReaderTheme): void {
     this.lastTheme = theme
+    this.readalongColor = theme.readalongBackground
     if (!this.rendition) return
 
     this.rendition.themes.register(THEME_NAME, {
@@ -146,6 +162,91 @@ export class EpubEngine implements BookEngine {
     return chunkText(text)
   }
 
+  async getSpeakableChunks(): Promise<SpeakableChunk[]> {
+    if (!this.rendition) return []
+    this.spans = []
+    const result: SpeakableChunk[] = []
+    let index = 0
+    for (const c of normalizeContents(this.rendition.getContents())) {
+      const body = c.document?.body
+      if (!body) continue
+      const entries = collectTextNodes(body)
+      for (const dc of domToChunks(body)) {
+        const range = c.document.createRange()
+        range.setStart(dc.startNode, dc.startOffset)
+        range.setEnd(dc.endNode, dc.endOffset)
+        let anchor: string
+        try {
+          anchor = c.cfiFromRange(range)
+        } catch {
+          continue
+        }
+        const chunk: SpeakableChunk = { index, text: dc.text, anchor }
+        result.push(chunk)
+        this.spans.push({
+          chunk,
+          start: locationToOffset(entries, dc.startNode, dc.startOffset),
+          end: locationToOffset(entries, dc.endNode, dc.endOffset),
+        })
+        index += 1
+      }
+    }
+    return result
+  }
+
+  locateChunk(chunk: SpeakableChunk): void {
+    if (!this.rendition) return
+    this.clearSpokenHighlight()
+    this.readalongCfi = chunk.anchor
+    try {
+      this.rendition.annotations.highlight(
+        chunk.anchor,
+        {},
+        undefined,
+        READALONG_CLASS,
+        {
+          fill: this.readalongColor,
+          'fill-opacity': '0.4',
+          'mix-blend-mode': 'multiply',
+        },
+      )
+    } catch {
+      // Anchor may be in a non-rendered section; ignore.
+    }
+    // Follow the spoken text: page/scroll to it only when off-screen.
+    if (!this.isAnchorVisible(chunk.anchor)) {
+      void this.rendition.display(chunk.anchor)
+    }
+  }
+
+  clearSpokenHighlight(): void {
+    if (this.readalongCfi && this.rendition) {
+      try {
+        this.rendition.annotations.remove(this.readalongCfi, 'highlight')
+      } catch {
+        // Already gone; ignore.
+      }
+    }
+    this.readalongCfi = null
+  }
+
+  chunkAtPoint(x: number, y: number): SpeakableChunk | null {
+    const c = this.primaryContents()
+    if (!c) return null
+    const frame = c.document.defaultView?.frameElement as HTMLElement | null
+    const rect = frame?.getBoundingClientRect()
+    const lx = rect ? x - rect.left : x
+    const ly = rect ? y - rect.top : y
+    const doc = c.document as Document & {
+      caretRangeFromPoint?: (x: number, y: number) => Range | null
+    }
+    const caret = doc.caretRangeFromPoint?.(lx, ly) ?? null
+    if (!caret) return null
+    const entries = collectTextNodes(doc.body)
+    const pos = locationToOffset(entries, caret.startContainer, caret.startOffset)
+    return this.spans.find((s) => pos >= s.start && pos < s.end)?.chunk ?? null
+  }
+
   destroy(): void {
     this.rendition?.destroy()
     this.book?.destroy()
@@ -156,6 +257,24 @@ export class EpubEngine implements BookEngine {
   private chapterTitleFor(href: string): string | undefined {
     const match = this.tocItems.find((item) => href.includes(stripHash(item.href)))
     return match?.label.trim()
+  }
+
+  private primaryContents(): Contents | null {
+    if (!this.rendition) return null
+    return normalizeContents(this.rendition.getContents())[0] ?? null
+  }
+
+  private isAnchorVisible(cfi: string): boolean {
+    const c = this.primaryContents()
+    if (!c) return true
+    try {
+      const rect = c.range(cfi).getBoundingClientRect()
+      const w = c.document.documentElement.clientWidth
+      const h = c.document.documentElement.clientHeight
+      return rect.right > 0 && rect.left < w && rect.bottom > 0 && rect.top < h
+    } catch {
+      return true
+    }
   }
 }
 

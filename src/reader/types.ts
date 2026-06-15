@@ -12,6 +12,26 @@ export interface SelectionInfo {
   text: string
 }
 
+/**
+ * A speakable unit of text with a positional anchor back into the rendered
+ * content. The anchor is engine-specific (an EPUB CFI range, or a
+ * `text-range:start-end` offset locator for the text engine) and round-trips
+ * through `locateChunk`/`chunkAtPoint`. This is what powers read-along
+ * highlighting and tap-to-start.
+ */
+export interface SpeakableChunk {
+  index: number
+  text: string
+  anchor: string
+}
+
+/** A search match within a book, anchored for navigation. */
+export interface SearchHit {
+  anchor: string
+  excerpt: string
+  chapterTitle?: string
+}
+
 export interface TocItem {
   label: string
   href: string
@@ -26,6 +46,8 @@ export interface ReaderTheme {
   pageBackground: string
   pageText: string
   pageLink: string
+  /** Background color for the read-along (currently-spoken) chunk. */
+  readalongBackground: string
   fontFamily: string
   /** Font size as a percentage, e.g. 110. */
   fontSizePercent: number
@@ -74,6 +96,24 @@ export interface BookEngine {
    * chunks (sentences) for the TTS pipeline. Empty array if unavailable.
    */
   getCurrentSectionText(): Promise<string[]>
+
+  /**
+   * Speakable chunks for the current section WITH positional anchors, so the
+   * reader can highlight/scroll to the spoken chunk and start from a tap.
+   */
+  getSpeakableChunks(): Promise<SpeakableChunk[]>
+
+  /** Highlight a spoken chunk and scroll/page it into view (read-along). */
+  locateChunk(chunk: SpeakableChunk): void
+
+  /** Remove the transient read-along highlight. */
+  clearSpokenHighlight(): void
+
+  /**
+   * Resolve the speakable chunk at a viewport coordinate (tap-to-start). The
+   * coordinates are relative to the reader container. Returns null if none.
+   */
+  chunkAtPoint(x: number, y: number): SpeakableChunk | null
 
   destroy(): void
 }

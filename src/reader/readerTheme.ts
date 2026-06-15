@@ -14,6 +14,7 @@ export function buildReaderTheme(
     pageBackground: theme.tokens.reader.pageBackground,
     pageText: theme.tokens.reader.pageText,
     pageLink: theme.tokens.reader.pageLink,
+    readalongBackground: theme.tokens.reader.readalongBackground,
     fontFamily: font.stack,
     fontSizePercent: Math.round(reading.fontScale * 100),
     lineHeight: reading.lineHeight,

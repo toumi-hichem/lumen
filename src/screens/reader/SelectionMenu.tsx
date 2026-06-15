@@ -7,6 +7,7 @@ interface SelectionMenuProps {
   text: string
   onHighlight: (color: HighlightColor) => void
   onBookmark: () => void
+  onReadHere: () => void
   onDismiss: () => void
 }
 
@@ -15,6 +16,7 @@ export function SelectionMenu({
   text,
   onHighlight,
   onBookmark,
+  onReadHere,
   onDismiss,
 }: SelectionMenuProps) {
   const { theme } = useTheme()
@@ -36,6 +38,9 @@ export function SelectionMenu({
       ))}
       <button className="btn" onClick={onBookmark}>
         Bookmark
+      </button>
+      <button className="btn" onClick={onReadHere}>
+        ▶ Read here
       </button>
       <button className="btn" onClick={onDismiss} aria-label="Dismiss">
         ✕

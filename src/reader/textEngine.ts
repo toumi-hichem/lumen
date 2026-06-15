@@ -1,12 +1,20 @@
 import type { BookFormat, HighlightColor } from '@/domain/models'
 import { chunkText } from '@/lib/textChunk'
+import { domToChunks } from '@/lib/domChunk'
 import {
   type BookEngine,
   type BookLocationInfo,
   type ReaderTheme,
   type SelectionInfo,
+  type SpeakableChunk,
   type TocItem,
 } from './types'
+
+interface ChunkSpan {
+  chunk: SpeakableChunk
+  start: number
+  end: number
+}
 
 /**
  * Plain-text / Markdown reader engine. Renders decoded text into a scrollable
@@ -26,6 +34,7 @@ export class TextEngine implements BookEngine {
   private selectionCb: ((sel: SelectionInfo) => void) | null = null
   private readonly highlights = new Map<string, HighlightColor>()
   private theme: ReaderTheme | null = null
+  private spans: ChunkSpan[] = []
 
   async open(data: ArrayBuffer): Promise<void> {
     this.text = new TextDecoder('utf-8').decode(data)
@@ -118,6 +127,60 @@ export class TextEngine implements BookEngine {
     return chunkText(this.text)
   }
 
+  async getSpeakableChunks(): Promise<SpeakableChunk[]> {
+    if (!this.content) return []
+    this.spans = []
+    const result: SpeakableChunk[] = []
+    let index = 0
+    for (const dc of domToChunks(this.content)) {
+      const start = globalOffset(this.content, dc.startNode, dc.startOffset)
+      const end = globalOffset(this.content, dc.endNode, dc.endOffset)
+      const chunk: SpeakableChunk = {
+        index,
+        text: dc.text,
+        anchor: `text-range:${start}-${end}`,
+      }
+      result.push(chunk)
+      this.spans.push({ chunk, start, end })
+      index += 1
+    }
+    return result
+  }
+
+  locateChunk(chunk: SpeakableChunk): void {
+    if (!this.content || !supportsHighlightApi()) return
+    const parsed = parseTextRange(chunk.anchor)
+    if (!parsed) return
+    const range = rangeFromOffsets(this.content, parsed.start, parsed.end)
+    if (!range) return
+    clearHighlightName('readalong')
+    registerHighlightRange('readalong', range)
+    // Keep the spoken line comfortably within the scroll viewport.
+    if (this.container) {
+      const cRect = this.container.getBoundingClientRect()
+      const rRect = range.getBoundingClientRect()
+      if (rRect.top < cRect.top || rRect.bottom > cRect.bottom) {
+        this.container.scrollTop +=
+          rRect.top - cRect.top - this.container.clientHeight / 3
+      }
+    }
+  }
+
+  clearSpokenHighlight(): void {
+    clearHighlightName('readalong')
+  }
+
+  chunkAtPoint(x: number, y: number): SpeakableChunk | null {
+    if (!this.content) return null
+    const doc = document as Document & {
+      caretRangeFromPoint?: (x: number, y: number) => Range | null
+    }
+    const caret = doc.caretRangeFromPoint?.(x, y) ?? null
+    if (!caret) return null
+    const pos = globalOffset(this.content, caret.startContainer, caret.startOffset)
+    return this.spans.find((s) => pos >= s.start && pos < s.end)?.chunk ?? null
+  }
+
   destroy(): void {
     this.container?.removeEventListener('scroll', this.handleScroll)
     this.content?.removeEventListener('mouseup', this.handleSelection)
@@ -153,39 +216,50 @@ export class TextEngine implements BookEngine {
 
   private renderHighlights(): void {
     if (!this.content || !supportsHighlightApi()) return
-    clearHighlightRegistry()
+    // Clear only user-highlight layers; leave the read-along layer intact.
+    for (const color of HL_COLORS) clearHighlightName(`hl-${color}`)
     for (const [cfiRange, color] of this.highlights) {
       const parsed = parseTextRange(cfiRange)
       if (!parsed) continue
       const range = rangeFromOffsets(this.content, parsed.start, parsed.end)
       if (!range) continue
-      registerHighlightRange(color, range)
+      registerHighlightRange(`hl-${color}`, range)
     }
   }
 }
 
-// --- CSS Custom Highlight API helpers (feature-detected) ---
+const HL_COLORS: HighlightColor[] = ['yellow', 'green', 'blue', 'pink', 'purple']
 
-const registry = new Map<HighlightColor, Highlight>()
+// --- CSS Custom Highlight API helpers (feature-detected) ---
+// Registration names map to ::highlight(<name>) rules in ui.css:
+// hl-yellow/green/blue/pink/purple for user highlights, readalong for TTS.
+
+const registry = new Map<string, Highlight>()
 
 function supportsHighlightApi(): boolean {
   return typeof CSS !== 'undefined' && 'highlights' in CSS
 }
 
-function registerHighlightRange(color: HighlightColor, range: Range): void {
+function registerHighlightRange(name: string, range: Range): void {
   if (!supportsHighlightApi()) return
-  let highlight = registry.get(color)
+  let highlight = registry.get(name)
   if (!highlight) {
     highlight = new Highlight()
-    registry.set(color, highlight)
-    CSS.highlights.set(`hl-${color}`, highlight)
+    registry.set(name, highlight)
+    CSS.highlights.set(name, highlight)
   }
   highlight.add(range)
 }
 
+function clearHighlightName(name: string): void {
+  if (!supportsHighlightApi()) return
+  CSS.highlights.delete(name)
+  registry.delete(name)
+}
+
 function clearHighlightRegistry(): void {
   if (!supportsHighlightApi()) return
-  for (const color of registry.keys()) CSS.highlights.delete(`hl-${color}`)
+  for (const name of registry.keys()) CSS.highlights.delete(name)
   registry.clear()
 }
 

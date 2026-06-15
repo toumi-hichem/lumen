@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useReader } from './reader/useReader'
 import { useTts } from './reader/useTts'
+import { useReadAlong } from './reader/useReadAlong'
 import { SelectionMenu } from './reader/SelectionMenu'
 import { TtsBar } from './reader/TtsBar'
 import { ReaderPanel } from './reader/ReaderPanel'
@@ -13,9 +14,33 @@ export function ReaderScreen() {
   const tts = useTts()
   const [panelOpen, setPanelOpen] = useState(false)
 
+  // Highlight + scroll to the chunk currently being spoken.
+  useReadAlong({
+    status: tts.status,
+    chunkIndex: tts.chunkIndex,
+    chunks: tts.chunks,
+    locate: reader.locateChunk,
+    clear: reader.clearSpokenHighlight,
+  })
+
   const startReadAloud = async () => {
-    const chunks = await reader.getSectionText()
+    const chunks = await reader.getSpeakableChunks()
     if (chunks.length) tts.start(chunks)
+  }
+
+  // Start read-aloud from the chunk matching the current text selection.
+  const readFromSelection = async () => {
+    const text = reader.selection?.text
+    reader.clearSelection()
+    const chunks = await reader.getSpeakableChunks()
+    if (!chunks.length) return
+    let index = 0
+    if (text) {
+      const needle = text.replace(/\s+/g, ' ').trim().slice(0, 30).toLowerCase()
+      const found = chunks.findIndex((c) => c.text.toLowerCase().includes(needle))
+      if (found >= 0) index = found
+    }
+    tts.start(chunks, index)
   }
 
   if (reader.status === 'error') {
@@ -86,6 +111,7 @@ export function ReaderScreen() {
               reader.addBookmark()
               reader.clearSelection()
             }}
+            onReadHere={() => void readFromSelection()}
             onDismiss={reader.clearSelection}
           />
         )}

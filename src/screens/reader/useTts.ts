@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { TtsController, type TtsStatus } from '@/tts/controller'
 import { useSettingsStore } from '@/store/settingsStore'
+import type { SpeakableChunk } from '@/reader/types'
 
 export interface ReaderTtsApi {
   status: TtsStatus
   chunkIndex: number
   activeEngineId: string
   error?: string
-  start: (chunks: string[]) => void
+  /** Currently-loaded chunks, for read-along anchoring. */
+  chunks: SpeakableChunk[]
+  start: (chunks: SpeakableChunk[], startIndex?: number) => void
   pause: () => void
   resume: () => void
   stop: () => void
@@ -20,7 +23,7 @@ export function useTts(): ReaderTtsApi {
   const [chunkIndex, setChunkIndex] = useState(0)
   const [activeEngineId, setActiveEngineId] = useState(tts.engineId)
   const [error, setError] = useState<string>()
-  const chunksRef = useRef<string[]>([])
+  const [chunks, setChunks] = useState<SpeakableChunk[]>([])
 
   const controllerRef = useRef<TtsController | null>(null)
   if (!controllerRef.current) {
@@ -50,13 +53,13 @@ export function useTts(): ReaderTtsApi {
     return () => controllerRef.current?.dispose()
   }, [])
 
-  const start = (chunks: string[]) => {
+  const start = (next: SpeakableChunk[], startIndex = 0) => {
     setError(undefined)
-    chunksRef.current = chunks
+    setChunks(next)
     void controllerRef.current?.play(
-      chunks,
+      next.map((c) => c.text),
       { rate: tts.rate, pitch: tts.pitch, voiceId: tts.voiceId },
-      0,
+      startIndex,
     )
   }
 
@@ -65,6 +68,7 @@ export function useTts(): ReaderTtsApi {
     chunkIndex,
     activeEngineId,
     error,
+    chunks,
     start,
     pause: () => controllerRef.current?.pause(),
     resume: () => void controllerRef.current?.resume(),

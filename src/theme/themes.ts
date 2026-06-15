@@ -27,6 +27,7 @@ export const lightTheme: Theme = {
       pageLink: '#2f6df6',
       selectionBackground: 'rgba(47,109,246,0.22)',
       selectionText: 'inherit',
+      readalongBackground: 'rgba(47,109,246,0.18)',
     },
     highlight: {
       yellow: '#fde68a',
@@ -61,6 +62,7 @@ export const sepiaTheme: Theme = {
       pageLink: '#8a5a2f',
       selectionBackground: 'rgba(154,107,63,0.25)',
       selectionText: 'inherit',
+      readalongBackground: 'rgba(154,107,63,0.22)',
     },
     highlight: {
       yellow: '#e8c87a',
@@ -95,6 +97,7 @@ export const darkTheme: Theme = {
       pageLink: '#7aa2ff',
       selectionBackground: 'rgba(91,140,255,0.3)',
       selectionText: 'inherit',
+      readalongBackground: 'rgba(91,140,255,0.28)',
     },
     highlight: {
       yellow: '#7a6a2a',
@@ -129,6 +132,7 @@ export const nightTheme: Theme = {
       pageLink: '#7aa2ff',
       selectionBackground: 'rgba(106,147,255,0.32)',
       selectionText: 'inherit',
+      readalongBackground: 'rgba(106,147,255,0.3)',
     },
     highlight: {
       yellow: '#6b5d24',

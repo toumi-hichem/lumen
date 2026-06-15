@@ -8,7 +8,13 @@ import type {
 import { createId } from '@/lib/id'
 import { getErrorMessage } from '@/lib/result'
 import { createEngine } from '@/reader/engineRegistry'
-import type { BookEngine, BookLocationInfo, SelectionInfo, TocItem } from '@/reader/types'
+import type {
+  BookEngine,
+  BookLocationInfo,
+  SelectionInfo,
+  SpeakableChunk,
+  TocItem,
+} from '@/reader/types'
 import { buildReaderTheme } from '@/reader/readerTheme'
 import { bookRepository } from '@/storage/bookRepository'
 import { bookmarkRepository } from '@/storage/bookmarkRepository'
@@ -40,6 +46,14 @@ export interface ReaderApi {
   clearSelection: () => void
   /** Plain-text of the current section, chunked for read-aloud. */
   getSectionText: () => Promise<string[]>
+  /** Anchored speakable chunks for read-along + tap-to-start. */
+  getSpeakableChunks: () => Promise<SpeakableChunk[]>
+  /** Highlight + scroll to a spoken chunk (read-along). */
+  locateChunk: (chunk: SpeakableChunk) => void
+  /** Remove the read-along highlight. */
+  clearSpokenHighlight: () => void
+  /** Resolve the chunk at client coordinates (tap-to-start). */
+  chunkAtPoint: (x: number, y: number) => SpeakableChunk | null
 }
 
 export function useReader(bookId: string): ReaderApi {
@@ -155,6 +169,22 @@ export function useReader(bookId: string): ReaderApi {
   const clearSelection = () => setSelection(undefined)
   const getSectionText = () =>
     engineRef.current?.getCurrentSectionText() ?? Promise.resolve([])
+  const getSpeakableChunks = useCallback(
+    () => engineRef.current?.getSpeakableChunks() ?? Promise.resolve([]),
+    [],
+  )
+  const locateChunk = useCallback(
+    (chunk: SpeakableChunk) => engineRef.current?.locateChunk(chunk),
+    [],
+  )
+  const clearSpokenHighlight = useCallback(
+    () => engineRef.current?.clearSpokenHighlight(),
+    [],
+  )
+  const chunkAtPoint = useCallback(
+    (x: number, y: number) => engineRef.current?.chunkAtPoint(x, y) ?? null,
+    [],
+  )
 
   const addBookmark = () => {
     if (!book || !location) return
@@ -221,6 +251,10 @@ export function useReader(bookId: string): ReaderApi {
     removeHighlight,
     clearSelection,
     getSectionText,
+    getSpeakableChunks,
+    locateChunk,
+    clearSpokenHighlight,
+    chunkAtPoint,
   }
 }
 

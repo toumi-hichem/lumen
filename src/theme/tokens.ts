@@ -41,6 +41,8 @@ export interface ReaderTokens {
   pageLink: string
   selectionBackground: string
   selectionText: string
+  /** Background of the sentence/paragraph currently being read aloud. */
+  readalongBackground: string
 }
 
 export type HighlightPalette = Record<HighlightColor, string>
