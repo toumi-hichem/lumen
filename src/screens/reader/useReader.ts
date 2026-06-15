@@ -21,6 +21,7 @@ import { bookRepository } from '@/storage/bookRepository'
 import { bookmarkRepository } from '@/storage/bookmarkRepository'
 import { highlightRepository } from '@/storage/highlightRepository'
 import { progressRepository } from '@/storage/progressRepository'
+import { sessionRepository } from '@/storage/sessionRepository'
 import { fileStore } from '@/storage/fileStore'
 import { useTheme } from '@/theme/ThemeProvider'
 import { useSettingsStore } from '@/store/settingsStore'
@@ -78,6 +79,9 @@ export function useReader(bookId: string): ReaderApi {
   const engineRef = useRef<BookEngine | null>(null)
   const containerEl = useRef<HTMLDivElement | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const sessionStart = useRef(0)
+  const sessionBookId = useRef('')
+  const markedFinished = useRef(false)
 
   // Callback ref so we know exactly when the viewport node is in the DOM.
   const containerRef = useCallback((node: HTMLDivElement | null) => {
@@ -135,7 +139,14 @@ export function useReader(bookId: string): ReaderApi {
         setBookmarks(savedBookmarks)
         setHighlights(savedHighlights)
         setStatus('ready')
-        void bookRepository.save({ ...loaded, lastOpenedAt: Date.now() })
+        sessionStart.current = Date.now()
+        sessionBookId.current = loaded.id
+        markedFinished.current = loaded.status === 'finished'
+        void bookRepository.save({
+          ...loaded,
+          lastOpenedAt: Date.now(),
+          status: loaded.status === 'finished' ? 'finished' : 'reading',
+        })
       } catch (e) {
         if (active) {
           setError(getErrorMessage(e))
@@ -148,6 +159,18 @@ export function useReader(bookId: string): ReaderApi {
     return () => {
       active = false
       clearTimeout(saveTimer.current)
+      // Record the reading session (ignore very short opens).
+      const elapsed = sessionStart.current ? Date.now() - sessionStart.current : 0
+      if (sessionBookId.current && elapsed > 10_000) {
+        void sessionRepository.add({
+          id: createId('sess'),
+          bookId: sessionBookId.current,
+          startedAt: sessionStart.current,
+          endedAt: Date.now(),
+          durationMs: elapsed,
+        })
+      }
+      sessionStart.current = 0
       engineRef.current?.destroy()
       engineRef.current = null
     }
@@ -169,6 +192,13 @@ export function useReader(bookId: string): ReaderApi {
         updatedAt: Date.now(),
       })
     }, 600)
+    // Mark the book finished once near the end.
+    if (loc.progress >= 0.98 && !markedFinished.current) {
+      markedFinished.current = true
+      void bookRepository.findById(id).then((b) => {
+        if (b) void bookRepository.save({ ...b, status: 'finished' })
+      })
+    }
   }
 
   const next = () => void engineRef.current?.next()

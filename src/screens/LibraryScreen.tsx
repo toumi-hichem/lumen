@@ -1,13 +1,39 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLibraryStore } from '@/store/libraryStore'
-import type { Book } from '@/domain/models'
+import type { Book, BookStatus } from '@/domain/models'
+
+type SortKey = 'added' | 'recent' | 'title' | 'author'
+
+const STATUS_FILTERS: Array<{ key: BookStatus | 'all'; label: string }> = [
+  { key: 'all', label: 'All' },
+  { key: 'reading', label: 'Reading' },
+  { key: 'unread', label: 'Unread' },
+  { key: 'finished', label: 'Finished' },
+]
 
 export function LibraryScreen() {
   const navigate = useNavigate()
-  const { books, loading, importing, error, load, importFiles, remove, clearError } =
-    useLibraryStore()
+  const {
+    books,
+    collections,
+    loading,
+    importing,
+    error,
+    load,
+    importFiles,
+    remove,
+    setStatus,
+    createCollection,
+    toggleBookInCollection,
+    clearError,
+  } = useLibraryStore()
   const fileInput = useRef<HTMLInputElement>(null)
+
+  const [search, setSearch] = useState('')
+  const [sort, setSort] = useState<SortKey>('added')
+  const [statusFilter, setStatusFilter] = useState<BookStatus | 'all'>('all')
+  const [collectionFilter, setCollectionFilter] = useState<string | null>(null)
 
   useEffect(() => {
     void load()
@@ -18,19 +44,58 @@ export function LibraryScreen() {
     event.target.value = ''
   }
 
-  const onDelete = (book: Book) => {
-    if (confirm(`Remove "${book.title}" from your library?`)) void remove(book.id)
+  const recent = useMemo(
+    () =>
+      books
+        .filter((b) => b.lastOpenedAt)
+        .sort((a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0))
+        .slice(0, 8),
+    [books],
+  )
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    let list = books.filter((b) => {
+      if (statusFilter !== 'all' && (b.status ?? 'unread') !== statusFilter) {
+        return false
+      }
+      if (collectionFilter && !(b.collectionIds ?? []).includes(collectionFilter)) {
+        return false
+      }
+      if (q && !`${b.title} ${b.author}`.toLowerCase().includes(q)) return false
+      return true
+    })
+    list = [...list].sort((a, b) => {
+      switch (sort) {
+        case 'title':
+          return a.title.localeCompare(b.title)
+        case 'author':
+          return a.author.localeCompare(b.author)
+        case 'recent':
+          return (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0)
+        default:
+          return b.addedAt - a.addedAt
+      }
+    })
+    return list
+  }, [books, search, sort, statusFilter, collectionFilter])
+
+  const newShelf = () => {
+    const name = prompt('New shelf name')
+    if (name) void createCollection(name)
   }
 
   return (
     <div className="app">
       <header className="appbar">
         <h1>Lumen</h1>
-        <button
-          className="btn"
-          onClick={() => navigate('/settings')}
-          aria-label="Settings"
-        >
+        <button className="btn" onClick={() => navigate('/stats')}>
+          Stats
+        </button>
+        <button className="btn" onClick={() => navigate('/highlights')}>
+          Highlights
+        </button>
+        <button className="btn" onClick={() => navigate('/settings')}>
           Settings
         </button>
         <button
@@ -57,6 +122,60 @@ export function LibraryScreen() {
           </div>
         )}
 
+        {!loading && books.length > 0 && (
+          <>
+            <div className="library-controls">
+              <input
+                className="select"
+                placeholder="Search title or author…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              <select
+                className="select"
+                value={sort}
+                onChange={(e) => setSort(e.target.value as SortKey)}
+              >
+                <option value="added">Recently added</option>
+                <option value="recent">Recently read</option>
+                <option value="title">Title</option>
+                <option value="author">Author</option>
+              </select>
+            </div>
+
+            <div className="filter-row">
+              {STATUS_FILTERS.map((f) => (
+                <button
+                  key={f.key}
+                  className={`chip ${statusFilter === f.key ? 'active' : ''}`}
+                  onClick={() => setStatusFilter(f.key)}
+                >
+                  {f.label}
+                </button>
+              ))}
+              <span className="filter-sep" />
+              <button
+                className={`chip ${collectionFilter === null ? 'active' : ''}`}
+                onClick={() => setCollectionFilter(null)}
+              >
+                All shelves
+              </button>
+              {collections.map((c) => (
+                <button
+                  key={c.id}
+                  className={`chip ${collectionFilter === c.id ? 'active' : ''}`}
+                  onClick={() => setCollectionFilter(c.id)}
+                >
+                  {c.name}
+                </button>
+              ))}
+              <button className="chip" onClick={newShelf}>
+                ＋ Shelf
+              </button>
+            </div>
+          </>
+        )}
+
         {loading ? (
           <p className="muted">Loading library…</p>
         ) : books.length === 0 ? (
@@ -65,37 +184,74 @@ export function LibraryScreen() {
             <p>Add an EPUB or text file to start reading.</p>
           </div>
         ) : (
-          <div className="library-grid">
-            {books.map((book) => (
-              <BookCard
-                key={book.id}
-                book={book}
-                onOpen={() => navigate(`/read/${book.id}`)}
-                onDelete={() => onDelete(book)}
-              />
-            ))}
-          </div>
+          <>
+            {recent.length > 0 && !search && statusFilter === 'all' && !collectionFilter && (
+              <section>
+                <h2 className="row-title">Continue reading</h2>
+                <div className="book-row">
+                  {recent.map((book) => (
+                    <BookCard
+                      key={`recent-${book.id}`}
+                      book={book}
+                      collections={collections}
+                      compact
+                      onOpen={() => navigate(`/read/${book.id}`)}
+                      onSetStatus={(s) => void setStatus(book.id, s)}
+                      onToggleShelf={(c) => void toggleBookInCollection(book.id, c)}
+                      onDelete={() => void confirmDelete(book, remove)}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <h2 className="row-title">All books</h2>
+            <div className="library-grid">
+              {visible.map((book) => (
+                <BookCard
+                  key={book.id}
+                  book={book}
+                  collections={collections}
+                  onOpen={() => navigate(`/read/${book.id}`)}
+                  onSetStatus={(s) => void setStatus(book.id, s)}
+                  onToggleShelf={(c) => void toggleBookInCollection(book.id, c)}
+                  onDelete={() => void confirmDelete(book, remove)}
+                />
+              ))}
+            </div>
+          </>
         )}
       </main>
     </div>
   )
 }
 
+async function confirmDelete(book: Book, remove: (id: string) => Promise<void>) {
+  if (confirm(`Remove "${book.title}" from your library?`)) await remove(book.id)
+}
+
 interface BookCardProps {
   book: Book
+  collections: { id: string; name: string }[]
+  compact?: boolean
   onOpen: () => void
+  onSetStatus: (status: BookStatus) => void
+  onToggleShelf: (collectionId: string) => void
   onDelete: () => void
 }
 
-function BookCard({ book, onOpen, onDelete }: BookCardProps) {
+function BookCard({
+  book,
+  collections,
+  compact,
+  onOpen,
+  onSetStatus,
+  onToggleShelf,
+  onDelete,
+}: BookCardProps) {
+  const [menu, setMenu] = useState(false)
   return (
-    <div
-      className="book-card"
-      onContextMenu={(e) => {
-        e.preventDefault()
-        onDelete()
-      }}
-    >
+    <div className={`book-card ${compact ? 'compact' : ''}`}>
       <button
         className="book-cover-button"
         onClick={onOpen}
@@ -105,13 +261,54 @@ function BookCard({ book, onOpen, onDelete }: BookCardProps) {
         {book.coverUrl ? (
           <img className="book-cover" src={book.coverUrl} alt="" />
         ) : (
-          <div className="book-cover book-cover-fallback">{book.title}</div>
+          <div className="book-cover book-cover-fallback" style={coverGradient(book.title)}>
+            {book.title}
+          </div>
         )}
       </button>
       <div className="book-meta">
         <p className="book-title">{book.title}</p>
         <p className="book-author">{book.author}</p>
+        {book.status && book.status !== 'unread' && (
+          <span className={`status-pill ${book.status}`}>{book.status}</span>
+        )}
+        {!compact && (
+          <button className="card-menu-btn" onClick={() => setMenu((m) => !m)}>
+            ⋯
+          </button>
+        )}
       </div>
+
+      {menu && !compact && (
+        <div className="card-menu">
+          <div className="card-menu-section">Status</div>
+          {(['unread', 'reading', 'finished'] as BookStatus[]).map((s) => (
+            <button key={s} className="list-item" onClick={() => onSetStatus(s)}>
+              {s}
+            </button>
+          ))}
+          {collections.length > 0 && <div className="card-menu-section">Shelves</div>}
+          {collections.map((c) => (
+            <button key={c.id} className="list-item" onClick={() => onToggleShelf(c.id)}>
+              {(book.collectionIds ?? []).includes(c.id) ? '✓ ' : ''}
+              {c.name}
+            </button>
+          ))}
+          <button className="list-item danger" onClick={onDelete}>
+            Remove
+          </button>
+        </div>
+      )}
     </div>
   )
+}
+
+/** Deterministic cover gradient from the title, used when no cover art. */
+function coverGradient(title: string): React.CSSProperties {
+  let hash = 0
+  for (let i = 0; i < title.length; i++) hash = (hash * 31 + title.charCodeAt(i)) % 360
+  return {
+    background: `linear-gradient(135deg, hsl(${hash} 50% 45%), hsl(${(hash + 40) % 360} 55% 35%))`,
+    color: '#fff',
+  }
 }
