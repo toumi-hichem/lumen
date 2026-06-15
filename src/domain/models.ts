@@ -1,0 +1,58 @@
+// Core domain models for the reader. These are storage-agnostic and shared
+// across the library, reader, bookmark, highlight and TTS subsystems.
+
+export type BookFormat = 'epub' | 'mobi' | 'azw3' | 'text' | 'pdf'
+
+export interface Book {
+  readonly id: string
+  readonly title: string
+  readonly author: string
+  readonly format: BookFormat
+  /** Object URL or blob key resolved from the stored file. */
+  readonly coverUrl?: string
+  /** Storage key for the raw file blob inside the `files` object store. */
+  readonly fileKey: string
+  readonly fileSize: number
+  readonly language?: string
+  readonly addedAt: number
+  readonly lastOpenedAt?: number
+}
+
+/**
+ * A position inside a book. For EPUB this wraps an EPUB CFI; other engines
+ * supply their own opaque locator. `progress` is a 0..1 fraction of the whole
+ * book and is engine-independent so the UI can always render a progress bar.
+ */
+export interface ReadingLocation {
+  readonly cfi: string
+  readonly progress: number
+  readonly chapterTitle?: string
+}
+
+export interface ReadingProgress {
+  readonly bookId: string
+  readonly location: ReadingLocation
+  readonly updatedAt: number
+}
+
+export interface Bookmark {
+  readonly id: string
+  readonly bookId: string
+  readonly cfi: string
+  readonly label: string
+  readonly excerpt?: string
+  readonly createdAt: number
+}
+
+export type HighlightColor = 'yellow' | 'green' | 'blue' | 'pink' | 'purple'
+
+export interface Highlight {
+  readonly id: string
+  readonly bookId: string
+  /** Range CFI spanning the highlighted text. */
+  readonly cfiRange: string
+  readonly text: string
+  readonly color: HighlightColor
+  readonly note?: string
+  readonly createdAt: number
+}

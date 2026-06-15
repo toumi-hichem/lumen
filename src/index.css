@@ -1,0 +1,100 @@
+/* Global styles. Every color comes from a theme CSS variable (see
+   theme/cssVars.ts), so the whole UI re-skins when the :root vars change. */
+
+:root {
+  --ui-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --space: 16px;
+
+  /* Sensible fallbacks before ThemeProvider mounts. */
+  --color-background: #f7f7f8;
+  --color-surface: #ffffff;
+  --color-surface-alt: #f0f1f3;
+  --color-text: #1a1a1e;
+  --color-text-muted: #6b7280;
+  --color-primary: #2f6df6;
+  --color-on-primary: #ffffff;
+  --color-border: #e3e5e9;
+  --color-accent: #2f6df6;
+  --color-danger: #dc2626;
+
+  --reader-font-family: Georgia, serif;
+  --reader-font-scale: 1;
+  --reader-line-height: 1.6;
+  --reader-margin: 24px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--ui-font);
+  background: var(--color-background);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  /* Respect device notches on mobile. */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+a {
+  color: var(--color-primary);
+}
+
+/* Shared primitives consumed across screens. */
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.btn-primary {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  border-color: var(--color-primary);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-icon {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.muted {
+  color: var(--color-text-muted);
+}

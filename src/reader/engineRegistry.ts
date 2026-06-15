@@ -1,0 +1,47 @@
+import type { BookFormat } from '@/domain/models'
+import { EpubEngine } from './epubEngine'
+import { TextEngine } from './textEngine'
+import { type BookEngine, UnsupportedFormatError } from './types'
+
+type EngineFactory = () => BookEngine
+
+/**
+ * Maps a book format to the engine that renders it. New formats are added by
+ * registering a factory here (or via registerEngine at runtime) — the reader
+ * UI and TTS pipeline are format-agnostic and need no changes.
+ */
+const factories = new Map<BookFormat, EngineFactory>([
+  ['epub', () => new EpubEngine()],
+  ['text', () => new TextEngine()],
+])
+
+export function registerEngine(format: BookFormat, factory: EngineFactory): void {
+  factories.set(format, factory)
+}
+
+export function createEngine(format: BookFormat): BookEngine {
+  const factory = factories.get(format)
+  if (!factory) throw new UnsupportedFormatError(format)
+  return factory()
+}
+
+export function isFormatSupported(format: BookFormat): boolean {
+  return factories.has(format)
+}
+
+const EXTENSION_FORMATS: Record<string, BookFormat> = {
+  epub: 'epub',
+  mobi: 'mobi',
+  azw3: 'azw3',
+  txt: 'text',
+  text: 'text',
+  md: 'text',
+  markdown: 'text',
+  pdf: 'pdf',
+}
+
+/** Infer a book format from a filename, defaulting to text for unknowns. */
+export function detectFormat(filename: string): BookFormat {
+  const ext = filename.split('.').pop()?.toLowerCase() ?? ''
+  return EXTENSION_FORMATS[ext] ?? 'text'
+}

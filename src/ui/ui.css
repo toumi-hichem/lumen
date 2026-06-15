@@ -1,0 +1,312 @@
+/* Screen + component styles. All colors reference theme variables so every
+   screen re-skins automatically when the theme changes. */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 100dvh;
+}
+
+.appbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.appbar h1 {
+  font-size: 18px;
+  margin: 0;
+  flex: 1;
+}
+
+.appbar .spacer {
+  flex: 1;
+}
+
+.screen-body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+/* --- Library --- */
+.library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 16px;
+}
+
+.book-card {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  padding: 0;
+  overflow: hidden;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.book-cover {
+  aspect-ratio: 2 / 3;
+  width: 100%;
+  object-fit: cover;
+  background: var(--color-surface-alt);
+}
+
+.book-cover-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  font-weight: 600;
+  font-size: 14px;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.book-meta {
+  padding: 10px 12px;
+}
+
+.book-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 2px;
+  line-height: 1.3;
+}
+
+.book-author {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 64px 24px;
+  color: var(--color-text-muted);
+}
+
+/* --- Reader --- */
+.reader {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 100dvh;
+  background: var(--reader-page-background, var(--color-background));
+}
+
+.reader-viewport {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.reader-tap-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 22%;
+  z-index: 5;
+}
+.reader-tap-zone.left { left: 0; }
+.reader-tap-zone.right { right: 0; }
+
+.reader-progress {
+  height: 3px;
+  background: var(--color-surface-alt);
+}
+.reader-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--color-primary);
+  transition: width 0.2s ease;
+}
+
+/* --- Floating selection menu --- */
+.selection-menu {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--color-border);
+  cursor: pointer;
+}
+
+/* --- TTS bar --- */
+.tts-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+}
+.tts-bar .tts-label {
+  flex: 1;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Side panel (TOC / bookmarks / highlights) --- */
+.panel-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 40;
+  display: flex;
+}
+.panel {
+  width: min(360px, 85vw);
+  height: 100%;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+}
+.panel-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--color-border);
+}
+.panel-tabs button {
+  flex: 1;
+  padding: 12px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  border-bottom: 2px solid transparent;
+}
+.panel-tabs button.active {
+  color: var(--color-text);
+  border-bottom-color: var(--color-primary);
+}
+.panel-list {
+  flex: 1;
+  overflow: auto;
+  padding: 8px;
+}
+.list-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  border-bottom: 1px solid var(--color-border);
+}
+.list-item:hover {
+  background: var(--color-surface-alt);
+}
+.list-item small {
+  color: var(--color-text-muted);
+}
+
+/* --- Settings --- */
+.settings-section {
+  margin-bottom: 28px;
+}
+.settings-section h2 {
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  margin: 0 0 12px;
+}
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.theme-swatches,
+.font-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.theme-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--color-border);
+  background: var(--color-surface);
+  font-size: 12px;
+  min-width: 72px;
+}
+.theme-chip.active {
+  border-color: var(--color-primary);
+}
+.theme-chip .preview {
+  width: 48px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+}
+.chip {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 2px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 14px;
+}
+.chip.active {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+.range-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 0;
+}
+.range-row input[type='range'] {
+  width: 100%;
+}
+.error-banner {
+  background: color-mix(in srgb, var(--color-danger) 14%, transparent);
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  white-space: pre-line;
+  font-size: 13px;
+}
+.select {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
