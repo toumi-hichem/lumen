@@ -2,27 +2,50 @@
    theme/cssVars.ts), so the whole UI re-skins when the :root vars change. */
 
 :root {
-  --ui-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --radius: 12px;
-  --radius-sm: 8px;
+  --ui-font: 'Hanken Grotesk', system-ui, -apple-system, 'Segoe UI', Roboto,
+    sans-serif;
+  --display-font: 'Spectral', Georgia, 'Times New Roman', serif;
+  --mono-font: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+
+  /* Polished, softer geometry from the Lumen design identity. */
+  --radius: 18px;
+  --radius-sm: 11px;
+  --radius-pill: 999px;
   --space: 16px;
 
-  /* Sensible fallbacks before ThemeProvider mounts. */
-  --color-background: #f7f7f8;
+  /* Soft depth — used on cards/panels in light mode (overridden in dark). */
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04),
+    0 16px 38px -22px rgba(16, 24, 40, 0.22);
+  --shadow-soft: 0 1px 2px rgba(16, 24, 40, 0.05),
+    0 8px 20px -14px rgba(16, 24, 40, 0.18);
+
+  /* Sensible fallbacks (Daylight) before ThemeProvider mounts. */
+  --color-background: #f7f8fa;
   --color-surface: #ffffff;
-  --color-surface-alt: #f0f1f3;
-  --color-text: #1a1a1e;
-  --color-text-muted: #6b7280;
-  --color-primary: #2f6df6;
+  --color-surface-alt: #eef0f3;
+  --color-text: #1b1f24;
+  --color-text-muted: #5c636e;
+  --color-primary: #2563eb;
   --color-on-primary: #ffffff;
-  --color-border: #e3e5e9;
-  --color-accent: #2f6df6;
+  --color-border: #e1e4e9;
+  --color-accent: #2563eb;
   --color-danger: #dc2626;
 
-  --reader-font-family: Georgia, serif;
+  --reader-font-family: 'Spectral', Georgia, serif;
   --reader-font-scale: 1;
   --reader-line-height: 1.6;
   --reader-margin: 24px;
+}
+
+/* Dark themes get flatter, deeper shadows. */
+:root[data-theme='midnight'],
+:root[data-theme='carbon'],
+:root[data-theme='nord'],
+:root[data-theme='forest'],
+:root[data-theme='dusk'] {
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.02),
+    0 24px 50px -28px rgba(0, 0, 0, 0.75);
+  --shadow-soft: 0 18px 38px -26px rgba(0, 0, 0, 0.7);
 }
 
 * {
@@ -56,11 +79,20 @@ a {
   color: var(--color-primary);
 }
 
+/* Headings and brand surfaces use the Spectral display serif. */
+h1,
+h2,
+h3 {
+  font-family: var(--display-font);
+  letter-spacing: -0.01em;
+}
+
 /* Shared primitives consumed across screens. */
 .card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
+  box-shadow: var(--shadow-soft);
 }
 
 .btn {
@@ -73,7 +105,12 @@ a {
   background: var(--color-surface);
   color: var(--color-text);
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
+  transition: opacity 0.18s ease, border-color 0.18s ease;
+}
+
+.btn:hover:not(:disabled) {
+  opacity: 0.85;
 }
 
 .btn-primary {

@@ -9,8 +9,8 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { themeRegistry } from './themeRegistry'
 import { applyReadingVars, applyThemeVars, ensureFontLoaded } from './applyTheme'
 import { applyStatusBarTheme } from '@/lib/native'
-import { lightTheme } from './themes'
-import { systemSerif } from './fonts'
+import { daylightTheme } from './themes'
+import { spectral } from './fonts'
 import type { FontDefinition, Theme } from './tokens'
 
 interface ThemeContextValue {
@@ -27,11 +27,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const reading = useSettingsStore((s) => s.reading)
 
   const theme = useMemo(
-    () => themeRegistry.getTheme(reading.themeId) ?? lightTheme,
+    () => themeRegistry.getTheme(reading.themeId) ?? daylightTheme,
     [reading.themeId],
   )
   const font = useMemo(
-    () => themeRegistry.getFont(reading.fontId) ?? systemSerif,
+    () => themeRegistry.getFont(reading.fontId) ?? spectral,
     [reading.fontId],
   )
 

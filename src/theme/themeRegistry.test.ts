@@ -4,9 +4,22 @@ import type { Theme } from './tokens'
 import { lightTheme } from './themes'
 
 describe('themeRegistry', () => {
-  it('ships the built-in themes', () => {
+  it('ships the ten built-in themes', () => {
     const ids = themeRegistry.listThemes().map((t) => t.id)
-    expect(ids).toEqual(expect.arrayContaining(['light', 'sepia', 'dark', 'night']))
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        'daylight',
+        'sepia',
+        'midnight',
+        'carbon',
+        'solarized',
+        'nord',
+        'contrast',
+        'forest',
+        'dusk',
+        'e-ink',
+      ]),
+    )
   })
 
   it('supports runtime registration of new themes (extensibility)', () => {

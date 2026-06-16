@@ -46,8 +46,8 @@ export interface AppSettings {
 
 export const defaultSettings: AppSettings = {
   reading: {
-    themeId: 'light',
-    fontId: 'system-serif',
+    themeId: 'daylight',
+    fontId: 'spectral',
     fontScale: 1,
     lineHeight: 1.6,
     margin: 24,

@@ -506,3 +506,26 @@
 ::highlight(readalong) {
   background-color: var(--reader-readalong-background);
 }
+
+/* === Design identity polish (Spectral display + soft depth) === */
+.book-title,
+.stat-value {
+  font-family: var(--display-font);
+  letter-spacing: -0.005em;
+}
+/* Eyebrow / section labels stay in the UI sans, not the display serif. */
+.row-title,
+.settings-section h2 {
+  font-family: var(--ui-font);
+}
+.book-card {
+  box-shadow: var(--shadow-soft);
+}
+.panel,
+.selection-menu,
+.card-menu {
+  box-shadow: var(--shadow-card);
+}
+.appbar {
+  box-shadow: var(--shadow-soft);
+}
