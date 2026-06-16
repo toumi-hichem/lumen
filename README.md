@@ -80,6 +80,12 @@ npx cap add ios && npx cap open ios
 
 The web build in `dist/` is also directly deployable as a standard web app.
 
+## Marketing site
+
+A standalone landing site lives in `marketing/` (its own Vite project, deployed
+separately from the app). It implements the Lumen design identity and a live
+10-theme gallery. See `marketing/README.md`.
+
 ## Enabling Supertonic (on-device TTS)
 
 Supertonic runs fully on-device via ONNX. The model assets are large (~100 MB)

@@ -1,0 +1,15 @@
+{
+  "name": "lumen-marketing",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Marketing landing site for the Lumen reader (separate from the app).",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^8.0.12"
+  }
+}
