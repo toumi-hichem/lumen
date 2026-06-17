@@ -143,6 +143,10 @@ export interface BookEngine {
    */
   chunkAtPoint(x: number, y: number): SpeakableChunk | null
 
+  /** Scroll continuous content by a pixel delta (auto-scroll). Optional: only
+   *  engines with a scrollable viewport (text/MOBI) implement it. */
+  scrollByPixels?(px: number): void
+
   destroy(): void
 }
 

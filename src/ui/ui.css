@@ -383,6 +383,14 @@
 }
 .reader-tap-zone.left { left: 0; }
 .reader-tap-zone.right { right: 0; }
+.reader-tap-zone.center { width: auto; }
+
+/* Distraction-free mode hides the chrome; tap the center again to restore. */
+.reader.immersive .appbar,
+.reader.immersive .reader-progress,
+.reader.immersive .tts-bar {
+  display: none;
+}
 
 .reader-overlay {
   position: absolute;

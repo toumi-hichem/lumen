@@ -197,6 +197,26 @@ export function SettingsScreen() {
               onChange={(largeTapZones) => setReading({ largeTapZones })}
             />
           </div>
+          <div className="setting-row">
+            <span>
+              Keep screen on while reading
+              <br />
+              <small className="muted">Prevents the display from sleeping.</small>
+            </span>
+            <Toggle
+              ariaLabel="Keep screen on while reading"
+              checked={reading.keepAwake}
+              onChange={(keepAwake) => setReading({ keepAwake })}
+            />
+          </div>
+          <Slider
+            label={`Auto-scroll speed — ${reading.autoScrollSpeed} px/s`}
+            min={10}
+            max={120}
+            step={5}
+            value={reading.autoScrollSpeed}
+            onChange={(autoScrollSpeed) => setReading({ autoScrollSpeed })}
+          />
         </section>
 
         <section className="settings-section">

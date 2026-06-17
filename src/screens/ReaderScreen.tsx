@@ -3,12 +3,16 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useReader } from './reader/useReader'
 import { useTts } from './reader/useTts'
 import { useReadAlong } from './reader/useReadAlong'
+import { useKeepAwake } from './reader/useKeepAwake'
+import { useAutoScroll } from './reader/useAutoScroll'
 import { SelectionMenu } from './reader/SelectionMenu'
 import { TtsBar } from './reader/TtsBar'
 import { ReaderPanel } from './reader/ReaderPanel'
 import { useSettingsStore } from '@/store/settingsStore'
 import { bookSettingsRepository } from '@/storage/bookSettingsRepository'
 import { hapticTick } from '@/lib/native'
+import { Icon } from '@/ui/Icon'
+import { icons } from '@/ui/icons'
 
 export function ReaderScreen() {
   const { bookId = '' } = useParams()
@@ -18,6 +22,21 @@ export function ReaderScreen() {
   const setTts = useSettingsStore((s) => s.setTts)
   const reading = useSettingsStore((s) => s.reading)
   const [panelOpen, setPanelOpen] = useState(false)
+  const [immersive, setImmersive] = useState(false)
+  const [autoScroll, setAutoScroll] = useState(false)
+
+  const format = reader.book?.format
+  const canAutoScroll = format === 'text' || format === 'mobi' || format === 'azw3'
+
+  // Keep the screen awake while reading when the user enables it.
+  useKeepAwake(reader.status === 'ready' && reading.keepAwake)
+
+  // Steady auto-scroll for continuous (text/MOBI) content.
+  useAutoScroll({
+    active: autoScroll && canAutoScroll,
+    speed: reading.autoScrollSpeed,
+    scrollBy: reader.scrollByPixels,
+  })
 
   const maxChars = ttsPrefs.granularity === 'paragraph' ? 1200 : 240
 
@@ -130,24 +149,34 @@ export function ReaderScreen() {
   const warmOpacity = Math.max(0, Math.min(1, reading.warmth)) * 0.4
 
   return (
-    <div className="reader">
+    <div className={`reader ${immersive ? 'immersive' : ''}`}>
       <header className="appbar">
-        <button className="btn" onClick={() => navigate('/')} aria-label="Back to library">
-          ←
+        <button className="btn btn-icon" onClick={() => navigate('/')} aria-label="Back to library">
+          <Icon path={icons.back} size={18} />
         </button>
-        <button className="btn" onClick={() => setPanelOpen(true)} aria-label="Open menu">
+        <button className="btn btn-icon" onClick={() => setPanelOpen(true)} aria-label="Open menu">
           ☰
         </button>
         <h1 style={{ fontSize: 15 }}>{reader.book?.title ?? 'Loading…'}</h1>
+        {canAutoScroll && (
+          <button
+            className={`btn btn-icon ${autoScroll ? 'btn-primary' : ''}`}
+            onClick={() => setAutoScroll((v) => !v)}
+            aria-label={autoScroll ? 'Stop auto-scroll' : 'Start auto-scroll'}
+            aria-pressed={autoScroll}
+          >
+            <Icon path={autoScroll ? icons.close : icons.chevronDown} size={18} />
+          </button>
+        )}
         <button
-          className="btn"
+          className="btn btn-icon"
           onClick={reader.addBookmark}
           disabled={!reader.location}
           aria-label="Add bookmark"
         >
-          ＋
+          <Icon path={icons.bookmark} size={18} />
         </button>
-        <button className="btn" onClick={() => navigate('/settings')} aria-label="Settings">
+        <button className="btn btn-icon" onClick={() => navigate('/settings')} aria-label="Settings">
           Aa
         </button>
       </header>
@@ -188,6 +217,13 @@ export function ReaderScreen() {
           onClick={() => turn('next')}
           role="button"
           aria-label="Next page"
+        />
+        <div
+          className="reader-tap-zone center"
+          style={{ left: reading.largeTapZones ? '30%' : '22%', right: reading.largeTapZones ? '30%' : '22%' }}
+          onClick={() => setImmersive((v) => !v)}
+          role="button"
+          aria-label="Toggle distraction-free mode"
         />
 
         {reader.selection && (

@@ -61,6 +61,9 @@ export interface ReaderApi {
   clearSpokenHighlight: () => void
   /** Resolve the chunk at client coordinates (tap-to-start). */
   chunkAtPoint: (x: number, y: number) => SpeakableChunk | null
+  /** Scroll continuous content by a pixel delta (auto-scroll); no-op if the
+   *  engine has no scrollable viewport. */
+  scrollByPixels: (px: number) => void
 }
 
 export function useReader(bookId: string): ReaderApi {
@@ -232,6 +235,10 @@ export function useReader(bookId: string): ReaderApi {
     (x: number, y: number) => engineRef.current?.chunkAtPoint(x, y) ?? null,
     [],
   )
+  const scrollByPixels = useCallback(
+    (px: number) => engineRef.current?.scrollByPixels?.(px),
+    [],
+  )
 
   const addBookmark = () => {
     if (!book || !location) return
@@ -313,6 +320,7 @@ export function useReader(bookId: string): ReaderApi {
     locateChunk,
     clearSpokenHighlight,
     chunkAtPoint,
+    scrollByPixels,
   }
 }
 

@@ -33,6 +33,10 @@ export interface ReadingPreferences {
   letterSpacing: number
   /** Hide inline images to reduce visual clutter. */
   hideImages: boolean
+  /** Keep the screen awake while reading. */
+  keepAwake: boolean
+  /** Auto-scroll speed in pixels per second (scrolled/text content). */
+  autoScrollSpeed: number
 }
 
 export interface TtsPreferences {
@@ -71,6 +75,8 @@ export const defaultSettings: AppSettings = {
     bionicStrength: 0.5,
     letterSpacing: 0,
     hideImages: false,
+    keepAwake: false,
+    autoScrollSpeed: 30,
   },
   tts: {
     engineId: 'web-speech',

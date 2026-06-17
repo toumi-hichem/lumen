@@ -164,6 +164,12 @@ export class TextEngine implements BookEngine {
   /** The text engine is always continuous; flow is a no-op. */
   setFlow(): void {}
 
+  scrollByPixels(px: number): void {
+    if (!this.container) return
+    this.container.scrollTop += px
+    this.emitLocation()
+  }
+
   async search(query: string, limit = 100): Promise<SearchHit[]> {
     const term = query.trim()
     if (term.length < 2) return []

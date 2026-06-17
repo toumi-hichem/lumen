@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import { ThemeProvider } from '@/theme/ThemeProvider'
 import { useSettingsStore } from '@/store/settingsStore'
+import { isSupertonicDownloaded } from '@/tts/supertonic/assets'
 import { App } from './App'
 import './index.css'
 import './ui/ui.css'
@@ -16,7 +17,6 @@ void useSettingsStore
   .then(async () => {
     const { tts, setTts } = useSettingsStore.getState()
     if (tts.engineChosen || tts.engineId !== 'web-speech') return
-    const { isSupertonicDownloaded } = await import('@/tts/supertonic/assets')
     if (await isSupertonicDownloaded()) setTts({ engineId: 'supertonic' })
   })
 

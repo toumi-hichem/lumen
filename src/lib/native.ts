@@ -23,6 +23,29 @@ export async function applyStatusBarTheme(
   }
 }
 
+interface WakeLockSentinelLike {
+  release(): Promise<void>
+}
+interface WakeLockNavigator {
+  wakeLock?: { request(type: 'screen'): Promise<WakeLockSentinelLike> }
+}
+
+/**
+ * Request a screen wake lock so the display stays on while reading. Uses the
+ * standard Wake Lock API, which is available in modern browsers and the native
+ * WebView. Returns a release function; safe to call when unsupported.
+ */
+export async function requestWakeLock(): Promise<() => void> {
+  const nav = navigator as Navigator & WakeLockNavigator
+  if (!nav.wakeLock) return () => {}
+  try {
+    const sentinel = await nav.wakeLock.request('screen')
+    return () => void sentinel.release().catch(() => {})
+  } catch {
+    return () => {}
+  }
+}
+
 /** Light haptic tick for page turns / selections (native only). */
 export async function hapticTick(): Promise<void> {
   if (!platform.isNative()) return
