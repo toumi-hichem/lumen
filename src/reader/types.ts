@@ -7,9 +7,21 @@ export interface BookLocationInfo {
   chapterTitle?: string
 }
 
+/** Selection bounds in viewport (client) coordinates, used to anchor the menu. */
+export interface SelectionRect {
+  top: number
+  bottom: number
+  left: number
+  right: number
+  width: number
+  height: number
+}
+
 export interface SelectionInfo {
   cfiRange: string
   text: string
+  /** Bounding rect of the selection in viewport coordinates, when available. */
+  rect?: SelectionRect
 }
 
 /**

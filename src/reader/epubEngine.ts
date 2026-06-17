@@ -79,8 +79,33 @@ export class EpubEngine implements BookEngine {
     })
 
     this.rendition.on('selected', (cfiRange: string, contents: Contents) => {
-      const text = contents.window.getSelection()?.toString() ?? ''
-      if (text.trim()) this.selectionCb?.({ cfiRange, text })
+      const sel = contents.window.getSelection()
+      const text = sel?.toString() ?? ''
+      if (!text.trim()) return
+      let rect: SelectionInfo['rect']
+      if (sel && sel.rangeCount > 0) {
+        const r = sel.getRangeAt(0).getBoundingClientRect()
+        // The range is measured inside the iframe; offset by the frame's
+        // position so coordinates are relative to the outer viewport.
+        const frame = contents.window.frameElement?.getBoundingClientRect()
+        const ox = frame?.left ?? 0
+        const oy = frame?.top ?? 0
+        rect = {
+          top: r.top + oy,
+          bottom: r.bottom + oy,
+          left: r.left + ox,
+          right: r.right + ox,
+          width: r.width,
+          height: r.height,
+        }
+      }
+      this.selectionCb?.({ cfiRange, text, rect })
+    })
+
+    // Suppress the platform's own selection callout / context menu inside the
+    // book iframe so only Lumen's selection menu appears.
+    this.rendition.hooks.content.register((contents: Contents) => {
+      contents.document.addEventListener('contextmenu', (e) => e.preventDefault())
     })
 
     if (this.lastTheme) this.applyTheme(this.lastTheme)
@@ -155,6 +180,8 @@ export class EpubEngine implements BookEngine {
         'line-height': `${theme.lineHeight} !important`,
         'padding': `0 ${theme.margin}px !important`,
         'text-align': `${textAlign} !important`,
+        // Hide the OS selection callout; Lumen shows its own menu instead.
+        '-webkit-touch-callout': 'none',
       },
       p: {
         'line-height': `${theme.lineHeight} !important`,

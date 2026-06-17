@@ -152,7 +152,10 @@ export function ReaderScreen() {
         </button>
       </header>
 
-      <div className="reader-viewport">
+      <div
+        className="reader-viewport"
+        onContextMenu={(e) => e.preventDefault()}
+      >
         <div ref={reader.containerRef} style={{ position: 'absolute', inset: 0 }} />
 
         {/* Reading-comfort overlays (do not capture input). */}
@@ -190,6 +193,7 @@ export function ReaderScreen() {
         {reader.selection && (
           <SelectionMenu
             text={reader.selection.text}
+            rect={reader.selection.rect}
             onHighlight={reader.addHighlight}
             onBookmark={() => {
               reader.addBookmark()

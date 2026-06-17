@@ -276,7 +276,19 @@ export class TextEngine implements BookEngine {
     const range = selection.getRangeAt(0)
     const start = globalOffset(this.content, range.startContainer, range.startOffset)
     const end = globalOffset(this.content, range.endContainer, range.endOffset)
-    this.selectionCb?.({ cfiRange: `text-range:${start}-${end}`, text })
+    const r = range.getBoundingClientRect()
+    this.selectionCb?.({
+      cfiRange: `text-range:${start}-${end}`,
+      text,
+      rect: {
+        top: r.top,
+        bottom: r.bottom,
+        left: r.left,
+        right: r.right,
+        width: r.width,
+        height: r.height,
+      },
+    })
   }
 
   private renderHighlights(): void {

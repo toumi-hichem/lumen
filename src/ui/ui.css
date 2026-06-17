@@ -427,20 +427,54 @@
   position: fixed;
   z-index: 50;
   display: flex;
-  gap: 6px;
-  padding: 8px;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--shadow-card);
+}
+.selection-swatches {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+.selection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+}
+.selection-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 58px;
+  padding: 7px 4px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font-size: 11px;
+}
+.selection-action:hover {
+  background: var(--color-surface-alt);
 }
 
 .swatch {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: 2px solid var(--color-border);
   cursor: pointer;
+}
+
+/* Suppress the OS long-press callout on reader content (the text engine);
+   the EPUB iframe gets the same rule via injected theme CSS. */
+.reader-viewport {
+  -webkit-touch-callout: none;
 }
 
 /* --- TTS bar --- */
