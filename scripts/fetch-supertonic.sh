@@ -18,10 +18,9 @@ git clone --depth 1 "$REPO" "$TMP/supertonic"
 
 mkdir -p "$DEST/onnx" "$DEST/voice_styles"
 
-# The HF repo layout may evolve; copy the known asset groups defensively.
-cp -v "$TMP"/supertonic/**/duration_predictor.onnx "$DEST/onnx/" 2>/dev/null || true
-cp -rv "$TMP"/supertonic/assets/onnx/* "$DEST/onnx/" 2>/dev/null || true
-cp -rv "$TMP"/supertonic/assets/voice_styles/* "$DEST/voice_styles/" 2>/dev/null || true
+# The repo serves onnx/ and voice_styles/ at its root.
+cp -rv "$TMP"/supertonic/onnx/* "$DEST/onnx/" 2>/dev/null || true
+cp -rv "$TMP"/supertonic/voice_styles/* "$DEST/voice_styles/" 2>/dev/null || true
 
 echo "Done. Assets in $DEST"
 echo "If files are missing, inspect $TMP/supertonic and adjust paths above."

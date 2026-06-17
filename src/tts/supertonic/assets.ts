@@ -29,12 +29,12 @@ export const SUPERTONIC_MANIFEST: readonly string[] = [
 export const SUPERTONIC_SIZE_MB = 100
 
 /**
- * Remote source. The HuggingFace repo serves the assets under `assets/`. Point
- * this at your own server later (same `onnx/` + `voice_styles/` layout) by
+ * Remote source. The HuggingFace repo serves `onnx/` and `voice_styles/` at the
+ * repository root. Point this at your own server later (same layout) by
  * changing this one constant — the rest of the app is unaffected.
  */
 export const SUPERTONIC_REMOTE_BASE =
-  'https://huggingface.co/Supertone/supertonic/resolve/main/assets'
+  'https://huggingface.co/Supertone/supertonic/resolve/main'
 
 const CACHE_NAME = 'lumen-supertonic-v1'
 

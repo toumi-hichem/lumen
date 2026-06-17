@@ -36,4 +36,13 @@ describe('supertonic assets manifest', () => {
       `${SUPERTONIC_REMOTE_BASE}/onnx/tts.json`,
     )
   })
+
+  it('points at the repo root, not a nonexistent assets/ subfolder', () => {
+    // The HuggingFace repo serves onnx/ and voice_styles/ at its root; an
+    // /assets segment 404s (regression guard).
+    expect(SUPERTONIC_REMOTE_BASE).not.toMatch(/\/assets$/)
+    expect(supertonicRemoteUrl('onnx/vocoder.onnx')).toBe(
+      'https://huggingface.co/Supertone/supertonic/resolve/main/onnx/vocoder.onnx',
+    )
+  })
 })
