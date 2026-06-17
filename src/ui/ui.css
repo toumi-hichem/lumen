@@ -37,6 +37,10 @@
   font-size: 18px;
   margin: 0;
   flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .appbar .spacer {
@@ -45,8 +49,108 @@
 
 .screen-body {
   flex: 1;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 16px;
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Wide content (long titles, code, preformatted blocks) must never push the
+   viewport sideways on small screens. */
+.screen-body img,
+.screen-body pre {
+  max-width: 100%;
+}
+
+/* --- Home hub --- */
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+.home-tile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  text-align: left;
+  color: var(--color-text);
+}
+.home-tile-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+}
+.home-tile-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.home-tile-title {
+  font-weight: 600;
+  font-size: 15px;
+}
+.home-tile-preview {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.home-tile-chevron {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+.continue-card {
+  flex: 0 0 110px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  color: var(--color-text);
+}
+.continue-card .book-cover {
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-soft);
+}
+.continue-title {
+  font-size: 12px;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* --- Global bookmarks list --- */
+.bookmark-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.bookmark-row .annotation-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 0;
+}
+.bookmark-label {
+  font-weight: 600;
+}
+.bookmark-excerpt {
+  font-size: 13px;
 }
 
 /* --- Library --- */
@@ -111,11 +215,13 @@
 /* Library controls + filters */
 .library-controls {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   margin-bottom: 12px;
 }
 .library-controls .select:first-child {
-  flex: 1;
+  flex: 1 1 180px;
+  min-width: 0;
 }
 .filter-row {
   display: flex;
@@ -430,32 +536,160 @@
   padding: 12px 0;
   border-bottom: 1px solid var(--color-border);
 }
-.theme-swatches,
 .font-options {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
 }
+
+/* Uniform theme picker grid — equal cards, no ragged sizing. */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 10px;
+}
 .theme-chip {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 6px;
+  gap: 8px;
   padding: 8px;
   border-radius: var(--radius-sm);
   border: 2px solid var(--color-border);
   background: var(--color-surface);
   font-size: 12px;
-  min-width: 72px;
+  text-align: left;
+  color: var(--color-text);
 }
 .theme-chip.active {
   border-color: var(--color-primary);
 }
 .theme-chip .preview {
-  width: 48px;
-  height: 32px;
-  border-radius: 6px;
+  width: 100%;
+  height: 52px;
+  border-radius: 8px;
   border: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  overflow: hidden;
+}
+.theme-chip .preview-aa {
+  font-family: var(--display-font);
+  font-size: 22px;
+  line-height: 1;
+}
+.theme-chip-name {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  font-weight: 600;
+}
+.theme-chip-mode {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+/* --- Custom Select (listbox) --- */
+.select-wrap {
+  position: relative;
+  min-width: 0;
+}
+.select-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 150px;
+  max-width: 100%;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 14px;
+}
+.select-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.select-caret {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+.select-popover {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 100%;
+  max-width: calc(100vw - 32px);
+  max-height: 280px;
+  overflow: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-card);
+}
+.select-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.select-option-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.select-option.active {
+  background: var(--color-surface-alt);
+}
+.select-option.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.select-option-check {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+/* --- Toggle switch --- */
+.toggle {
+  position: relative;
+  width: 44px;
+  height: 26px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-alt);
+  transition: background 0.18s ease;
+}
+.toggle.on {
+  background: var(--color-primary);
+}
+.toggle-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform 0.18s ease;
+}
+.toggle.on .toggle-knob {
+  transform: translateX(18px);
 }
 .chip {
   padding: 8px 14px;
@@ -528,4 +762,32 @@
 }
 .appbar {
   box-shadow: var(--shadow-soft);
+}
+
+/* === Small-screen responsiveness === */
+@media (max-width: 600px) {
+  .screen-body {
+    padding: 12px;
+  }
+  .library-grid {
+    grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+    gap: 12px;
+  }
+  .stats-grid {
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+    gap: 10px;
+  }
+  .stat-value {
+    font-size: 22px;
+  }
+  .appbar {
+    gap: 8px;
+    padding: 10px 12px;
+  }
+}
+
+/* Floating surfaces must always fit the viewport, never bleed off-screen. */
+.selection-menu,
+.card-menu {
+  max-width: calc(100vw - 24px);
 }

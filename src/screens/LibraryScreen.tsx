@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLibraryStore } from '@/store/libraryStore'
+import { Icon } from '@/ui/Icon'
+import { icons } from '@/ui/icons'
+import { Select } from '@/ui/Select'
 import { t } from '@/i18n'
 import type { Book, BookStatus } from '@/domain/models'
 
@@ -89,16 +92,10 @@ export function LibraryScreen() {
   return (
     <div className="app">
       <header className="appbar">
-        <h1>{t('app.name')}</h1>
-        <button className="btn" onClick={() => navigate('/stats')}>
-          {t('nav.stats')}
+        <button className="btn btn-icon" onClick={() => navigate('/')} aria-label="Back">
+          <Icon path={icons.back} size={18} />
         </button>
-        <button className="btn" onClick={() => navigate('/highlights')}>
-          {t('nav.highlights')}
-        </button>
-        <button className="btn" onClick={() => navigate('/settings')}>
-          {t('nav.settings')}
-        </button>
+        <h1>Library</h1>
         <button
           className="btn btn-primary"
           onClick={() => fileInput.current?.click()}
@@ -132,16 +129,17 @@ export function LibraryScreen() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
-              <select
-                className="select"
+              <Select
+                ariaLabel="Sort books"
                 value={sort}
-                onChange={(e) => setSort(e.target.value as SortKey)}
-              >
-                <option value="added">Recently added</option>
-                <option value="recent">Recently read</option>
-                <option value="title">Title</option>
-                <option value="author">Author</option>
-              </select>
+                onChange={(value) => setSort(value as SortKey)}
+                options={[
+                  { value: 'added', label: 'Recently added' },
+                  { value: 'recent', label: 'Recently read' },
+                  { value: 'title', label: 'Title' },
+                  { value: 'author', label: 'Author' },
+                ]}
+              />
             </div>
 
             <div className="filter-row">

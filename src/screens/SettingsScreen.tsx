@@ -10,6 +10,10 @@ import {
   importBackup,
 } from '@/services/backup'
 import { getErrorMessage } from '@/lib/result'
+import { Select, type SelectOption } from '@/ui/Select'
+import { Toggle } from '@/ui/Toggle'
+import { Icon } from '@/ui/Icon'
+import { icons } from '@/ui/icons'
 
 export function SettingsScreen() {
   const navigate = useNavigate()
@@ -23,6 +27,20 @@ export function SettingsScreen() {
   const voices = useVoices(tts.engineId)
   const backupInput = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState<string>()
+
+  const engineOptions: SelectOption[] = engines.map((e) => ({
+    value: e.id,
+    label: e.name,
+    hint: !e.available ? 'unavailable' : e.requiresAssets ? 'needs assets' : undefined,
+    disabled: !e.available,
+  }))
+  const voiceOptions: SelectOption[] = [
+    { value: '', label: 'Default' },
+    ...voices.map((v) => ({
+      value: v.id,
+      label: v.lang ? `${v.name} (${v.lang})` : v.name,
+    })),
+  ]
 
   const doExport = async () => {
     setBusy('Exporting…')
@@ -48,8 +66,8 @@ export function SettingsScreen() {
   return (
     <div className="app">
       <header className="appbar">
-        <button className="btn" onClick={() => navigate(-1)} aria-label="Back">
-          ←
+        <button className="btn btn-icon" onClick={() => navigate(-1)} aria-label="Back">
+          <Icon path={icons.back} size={18} />
         </button>
         <h1>Settings</h1>
       </header>
@@ -57,12 +75,13 @@ export function SettingsScreen() {
       <main className="screen-body">
         <section className="settings-section">
           <h2>Theme</h2>
-          <div className="theme-swatches">
+          <div className="theme-grid">
             {themes.map((t) => (
               <button
                 key={t.id}
                 className={`theme-chip ${t.id === theme.id ? 'active' : ''}`}
                 onClick={() => setReading({ themeId: t.id })}
+                aria-pressed={t.id === theme.id}
               >
                 <span
                   className="preview"
@@ -70,8 +89,13 @@ export function SettingsScreen() {
                     background: t.tokens.reader.pageBackground,
                     color: t.tokens.reader.pageText,
                   }}
-                />
-                {t.name}
+                >
+                  <span className="preview-aa">Aa</span>
+                </span>
+                <span className="theme-chip-name">
+                  {t.name}
+                  <span className="theme-chip-mode">{t.mode}</span>
+                </span>
               </button>
             ))}
           </div>
@@ -158,21 +182,19 @@ export function SettingsScreen() {
           </div>
           <div className="setting-row">
             <span>Justify text</span>
-            <button
-              className={`chip ${reading.justify ? 'active' : ''}`}
-              onClick={() => setReading({ justify: !reading.justify })}
-            >
-              {reading.justify ? 'On' : 'Off'}
-            </button>
+            <Toggle
+              ariaLabel="Justify text"
+              checked={reading.justify}
+              onChange={(justify) => setReading({ justify })}
+            />
           </div>
           <div className="setting-row">
             <span>Large tap zones</span>
-            <button
-              className={`chip ${reading.largeTapZones ? 'active' : ''}`}
-              onClick={() => setReading({ largeTapZones: !reading.largeTapZones })}
-            >
-              {reading.largeTapZones ? 'On' : 'Off'}
-            </button>
+            <Toggle
+              ariaLabel="Large tap zones"
+              checked={reading.largeTapZones}
+              onChange={(largeTapZones) => setReading({ largeTapZones })}
+            />
           </div>
         </section>
 
@@ -180,35 +202,21 @@ export function SettingsScreen() {
           <h2>Speech (Text to Speech)</h2>
           <div className="setting-row">
             <span>Engine</span>
-            <select
-              className="select"
+            <Select
+              ariaLabel="Speech engine"
               value={tts.engineId}
-              onChange={(e) => setTts({ engineId: e.target.value, voiceId: '' })}
-            >
-              {engines.map((e) => (
-                <option key={e.id} value={e.id} disabled={!e.available}>
-                  {e.name}
-                  {e.requiresAssets ? ' — needs assets' : ''}
-                  {!e.available ? ' (unavailable)' : ''}
-                </option>
-              ))}
-            </select>
+              onChange={(engineId) => setTts({ engineId, voiceId: '' })}
+              options={engineOptions}
+            />
           </div>
           <div className="setting-row">
             <span>Voice</span>
-            <select
-              className="select"
+            <Select
+              ariaLabel="Voice"
               value={tts.voiceId}
-              onChange={(e) => setTts({ voiceId: e.target.value })}
-            >
-              <option value="">Default</option>
-              {voices.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name}
-                  {v.lang ? ` (${v.lang})` : ''}
-                </option>
-              ))}
-            </select>
+              onChange={(voiceId) => setTts({ voiceId })}
+              options={voiceOptions}
+            />
           </div>
           <Slider
             label={`Speed — ${tts.rate.toFixed(2)}×`}
@@ -245,12 +253,11 @@ export function SettingsScreen() {
           </div>
           <div className="setting-row">
             <span>Continue to next chapter</span>
-            <button
-              className={`chip ${tts.autoAdvance ? 'active' : ''}`}
-              onClick={() => setTts({ autoAdvance: !tts.autoAdvance })}
-            >
-              {tts.autoAdvance ? 'On' : 'Off'}
-            </button>
+            <Toggle
+              ariaLabel="Continue to next chapter"
+              checked={tts.autoAdvance}
+              onChange={(autoAdvance) => setTts({ autoAdvance })}
+            />
           </div>
           <p className="muted" style={{ fontSize: 12 }}>
             Supertonic runs fully on-device. Drop its model assets into
