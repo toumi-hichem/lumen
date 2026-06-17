@@ -64,9 +64,9 @@ body {
   background: var(--color-background);
   color: var(--color-text);
   -webkit-font-smoothing: antialiased;
-  /* Respect device notches on mobile. */
-  padding: env(safe-area-inset-top) env(safe-area-inset-right)
-    env(safe-area-inset-bottom) env(safe-area-inset-left);
+  /* Notch/safe-area insets are applied inside the app shell (appbar +
+     screen-body), not here, so the shell stays exactly viewport-height and the
+     header stays pinned instead of scrolling with the document. */
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
