@@ -1,6 +1,7 @@
 import type { BookFormat, HighlightColor } from '@/domain/models'
 import { chunkText } from '@/lib/textChunk'
 import { domToChunks } from '@/lib/domChunk'
+import { applyBionic } from '@/lib/bionic'
 import {
   type BookEngine,
   type BookLocationInfo,
@@ -37,6 +38,7 @@ export class TextEngine implements BookEngine {
   private theme: ReaderTheme | null = null
   private spans: ChunkSpan[] = []
   private asHtml = false
+  private bionic = { enabled: false, strength: 0.5 }
 
   async open(data: ArrayBuffer): Promise<void> {
     this.text = new TextDecoder('utf-8').decode(data)
@@ -118,6 +120,37 @@ export class TextEngine implements BookEngine {
     this.content.style.lineHeight = String(theme.lineHeight)
     this.content.style.padding = `${theme.margin}px`
     this.content.style.textAlign = theme.justify ? 'justify' : 'start'
+
+    // Focus / ADHD aids. Spacing and image hiding live on the persistent
+    // content element, so they survive a bionic re-populate.
+    this.content.style.letterSpacing = theme.letterSpacing
+      ? `${theme.letterSpacing}em`
+      : ''
+    this.content.classList.toggle('hide-images', theme.hideImages)
+
+    // Bionic reading mutates the DOM, so only re-populate when it actually
+    // changes (preserving scroll position and re-applying highlights).
+    const b = theme.bionic
+    const changed =
+      b.enabled !== this.bionic.enabled ||
+      (b.enabled && b.strength !== this.bionic.strength)
+    if (changed) {
+      this.bionic = { ...b }
+      this.repopulate()
+    }
+  }
+
+  /** Reset content from source, re-apply bionic + highlights, keep scroll. */
+  private repopulate(): void {
+    if (!this.container || !this.content) return
+    const range = this.container.scrollHeight - this.container.clientHeight
+    const frac = range > 0 ? this.container.scrollTop / range : 0
+    if (this.asHtml) this.content.innerHTML = this.text
+    else this.content.textContent = this.text
+    if (this.bionic.enabled) applyBionic(this.content, this.bionic.strength)
+    this.renderHighlights()
+    const newRange = this.container.scrollHeight - this.container.clientHeight
+    this.container.scrollTop = frac * newRange
   }
 
   async goToPercentage(percentage: number): Promise<void> {

@@ -200,6 +200,50 @@ export function SettingsScreen() {
         </section>
 
         <section className="settings-section">
+          <h2>Focus &amp; ADHD</h2>
+          <div className="setting-row">
+            <span>
+              Bionic reading
+              <br />
+              <small className="muted">
+                Bolds the start of each word to guide focus (text and MOBI books).
+              </small>
+            </span>
+            <Toggle
+              ariaLabel="Bionic reading"
+              checked={reading.bionicReading}
+              onChange={(bionicReading) => setReading({ bionicReading })}
+            />
+          </div>
+          {reading.bionicReading && (
+            <Slider
+              label={`Fixation strength — ${Math.round(reading.bionicStrength * 100)}%`}
+              min={0.3}
+              max={0.7}
+              step={0.05}
+              value={reading.bionicStrength}
+              onChange={(bionicStrength) => setReading({ bionicStrength })}
+            />
+          )}
+          <Slider
+            label={`Letter spacing — ${reading.letterSpacing.toFixed(2)}em`}
+            min={0}
+            max={0.2}
+            step={0.01}
+            value={reading.letterSpacing}
+            onChange={(letterSpacing) => setReading({ letterSpacing })}
+          />
+          <div className="setting-row">
+            <span>Hide inline images</span>
+            <Toggle
+              ariaLabel="Hide inline images"
+              checked={reading.hideImages}
+              onChange={(hideImages) => setReading({ hideImages })}
+            />
+          </div>
+        </section>
+
+        <section className="settings-section">
           <h2>Speech (Text to Speech)</h2>
           <div className="setting-row">
             <span>Engine</span>

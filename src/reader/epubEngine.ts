@@ -180,15 +180,20 @@ export class EpubEngine implements BookEngine {
         'line-height': `${theme.lineHeight} !important`,
         'padding': `0 ${theme.margin}px !important`,
         'text-align': `${textAlign} !important`,
+        'letter-spacing': `${theme.letterSpacing}em !important`,
         // Hide the OS selection callout; Lumen shows its own menu instead.
         '-webkit-touch-callout': 'none',
       },
       p: {
         'line-height': `${theme.lineHeight} !important`,
         'text-align': `${textAlign} !important`,
+        'letter-spacing': `${theme.letterSpacing}em !important`,
       },
       a: { color: `${theme.pageLink} !important` },
       '::selection': { background: theme.vars['--reader-selection-background'] },
+      ...(theme.hideImages
+        ? { 'img, svg, image': { display: 'none !important' } }
+        : {}),
     })
     this.rendition.themes.select(THEME_NAME)
     this.rendition.themes.fontSize(`${theme.fontSizePercent}%`)

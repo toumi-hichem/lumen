@@ -25,6 +25,14 @@ export interface ReadingPreferences {
   warmth: number
   /** Accessibility: wider page-turn tap targets. */
   largeTapZones: boolean
+  /** Focus aid: bold word prefixes (bionic reading). Text/MOBI formats. */
+  bionicReading: boolean
+  /** Bionic fixation strength, 0.3 (light) to 0.7 (strong). */
+  bionicStrength: number
+  /** Extra letter spacing in em (dyslexia aid), 0–0.2. */
+  letterSpacing: number
+  /** Hide inline images to reduce visual clutter. */
+  hideImages: boolean
 }
 
 export interface TtsPreferences {
@@ -59,6 +67,10 @@ export const defaultSettings: AppSettings = {
     brightness: 1,
     warmth: 0,
     largeTapZones: false,
+    bionicReading: false,
+    bionicStrength: 0.5,
+    letterSpacing: 0,
+    hideImages: false,
   },
   tts: {
     engineId: 'web-speech',

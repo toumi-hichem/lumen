@@ -68,6 +68,12 @@ export interface ReaderTheme {
   margin: number
   /** Justify body text. */
   justify: boolean
+  /** Extra letter spacing in em. */
+  letterSpacing: number
+  /** Hide inline images. */
+  hideImages: boolean
+  /** Bionic reading (bold word prefixes); applied by text/MOBI engines. */
+  bionic: { enabled: boolean; strength: number }
 }
 
 /**

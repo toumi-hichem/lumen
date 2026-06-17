@@ -391,6 +391,12 @@
   z-index: 4;
 }
 
+/* Focus aid: hide inline images in the text/MOBI engine. */
+.text-engine-content.hide-images img,
+.text-engine-content.hide-images svg {
+  display: none !important;
+}
+
 .pdf-page {
   min-height: 600px;
   margin: 0 auto 12px;

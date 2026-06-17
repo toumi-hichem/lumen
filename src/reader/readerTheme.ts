@@ -20,5 +20,8 @@ export function buildReaderTheme(
     lineHeight: reading.lineHeight,
     margin: reading.margin,
     justify: reading.justify,
+    letterSpacing: reading.letterSpacing,
+    hideImages: reading.hideImages,
+    bionic: { enabled: reading.bionicReading, strength: reading.bionicStrength },
   }
 }
