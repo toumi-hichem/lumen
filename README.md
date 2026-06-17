@@ -16,9 +16,18 @@ app, and an iOS app.
   highlights view with color filtering and Markdown/JSON export.
 - **Text to speech** — pluggable engine layer with the always-available system
   voice and an **on-device Supertonic** neural engine (onnxruntime-web, WebGPU
-  with WebAssembly fallback). Read-along sentence highlighting with auto-scroll,
-  tap/select "read from here", continuous narration across chapters, sentence/
-  paragraph granularity, sleep timer, lock-screen controls, per-book voice memory.
+  with WebAssembly fallback). Supertonic installs on demand from Settings
+  (~100 MB, cached for offline use) and becomes the default once present.
+  Read-along sentence highlighting with auto-scroll, tap/select "read from
+  here", continuous narration across chapters, sentence/paragraph granularity,
+  sleep timer, lock-screen controls, per-book voice memory.
+- **Focus & ADHD aids** — bionic reading (bold word prefixes), adjustable letter
+  spacing, and hide-images to cut clutter.
+- **Reading comfort** — keep the screen awake while reading, steady auto-scroll
+  for long-form text, and a distraction-free mode (tap the page center).
+- **Mobile-first navigation** — a Home hub with sections that each open their
+  own page (Library, Stats, Bookmarks, Highlights, Settings); custom themed
+  controls throughout (no native dropdowns).
 - **Reading stats** — time, day streak, sessions and a last-7-days chart.
 - **Backup & sync** — export/import the whole library (books, annotations,
   progress, shelves) as a single .zip, behind a swappable sync-provider interface.
@@ -89,7 +98,18 @@ separately from the app). It implements the Lumen design identity and a live
 ## Enabling Supertonic (on-device TTS)
 
 Supertonic runs fully on-device via ONNX. The model assets are large (~100 MB)
-and are not committed. Fetch them into `public/supertonic`:
+and are not committed.
+
+**End users** install them in-app: open **Settings → Speech** and tap
+**Download (~100 MB)**. The assets download from HuggingFace into the Cache
+Storage API (persisted on web and inside the native WebView), Supertonic becomes
+the default voice, and the reader works offline thereafter. The download reports
+progress and fails gracefully if storage runs out. To serve the assets from your
+own CDN later, change `SUPERTONIC_REMOTE_BASE` in
+`src/tts/supertonic/assets.ts` — nothing else changes.
+
+**For development or to bundle the assets**, fetch them into `public/supertonic`
+(the engine also reads from there as a fallback):
 
 ```bash
 ./scripts/fetch-supertonic.sh
