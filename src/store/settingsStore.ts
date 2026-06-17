@@ -37,6 +37,9 @@ export interface TtsPreferences {
   granularity: TtsGranularity
   /** Continue narration into the next chapter automatically. */
   autoAdvance: boolean
+  /** True once the user has explicitly picked an engine (suppresses the
+   *  automatic switch to Supertonic when its assets become available). */
+  engineChosen: boolean
 }
 
 export interface AppSettings {
@@ -64,6 +67,7 @@ export const defaultSettings: AppSettings = {
     pitch: 1,
     granularity: 'sentence',
     autoAdvance: true,
+    engineChosen: false,
   },
 }
 

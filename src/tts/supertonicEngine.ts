@@ -9,15 +9,15 @@ import {
 } from './types'
 import type { OrtModule, Style, TextToSpeech } from './supertonic/runtime'
 import { loadTextToSpeech, loadVoiceStyle } from './supertonic/loaders'
+import { type AssetSource, createAssetSource } from './supertonic/assets'
 
 export interface SupertonicConfigOptions {
   /**
-   * Base URL containing `onnx/` (the four .onnx files + tts.json +
-   * unicode_indexer.json) and `voice_styles/` (M1–M5, F1–F5 JSON). Defaults to
-   * `<base>/supertonic`. Drop the assets there (see scripts/fetch-supertonic.sh)
-   * or point this at a CDN.
+   * Asset source for the ONNX models and voice styles. Defaults to a
+   * cache-first source (downloaded assets, falling back to bundled
+   * `public/supertonic`). Provide a custom source to load from elsewhere.
    */
-  assetsBaseUrl?: string
+  source?: AssetSource
   /** Denoising steps: higher = better quality, slower. Supertonic default 8. */
   steps?: number
   /** BCP-47-ish language code understood by Supertonic (e.g. 'en'). */
@@ -56,14 +56,13 @@ export class SupertonicEngine implements TtsEngine {
   private ready = false
   private cancelled = false
 
-  private readonly base: string
+  private readonly source: AssetSource
   private readonly steps: number
   private readonly lang: string
   private readonly wasmPaths: string
 
   constructor(options: SupertonicConfigOptions = {}) {
-    const root = import.meta.env.BASE_URL ?? '/'
-    this.base = options.assetsBaseUrl ?? `${root}supertonic`
+    this.source = options.source ?? createAssetSource()
     this.steps = options.steps ?? 8
     this.lang = options.lang ?? 'en'
     this.wasmPaths =
@@ -84,14 +83,13 @@ export class SupertonicEngine implements TtsEngine {
         graphOptimizationLevel: 'all' as const,
       }
 
-      const onnxDir = `${this.base}/onnx`
       try {
-        const { tts } = await loadTextToSpeech(ort, onnxDir, sessionOptions)
+        const { tts } = await loadTextToSpeech(ort, this.source, sessionOptions)
         this.tts = tts
       } catch (gpuError) {
         if (!useWebGpu) throw gpuError
         // WebGPU init can fail at session create; retry on WASM.
-        const { tts } = await loadTextToSpeech(ort, onnxDir, {
+        const { tts } = await loadTextToSpeech(ort, this.source, {
           executionProviders: ['wasm'],
           graphOptimizationLevel: 'all',
         })
@@ -150,10 +148,7 @@ export class SupertonicEngine implements TtsEngine {
     const cached = this.styleCache.get(voiceId)
     if (cached) return cached
     if (!this.ort) throw new TtsNotAvailableError(this.id, 'not initialized')
-    const style = await loadVoiceStyle(
-      this.ort,
-      `${this.base}/voice_styles/${voiceId}.json`,
-    )
+    const style = await loadVoiceStyle(this.ort, this.source, voiceId)
     this.styleCache.set(voiceId, style)
     return style
   }

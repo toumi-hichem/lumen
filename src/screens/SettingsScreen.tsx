@@ -14,6 +14,7 @@ import { Select, type SelectOption } from '@/ui/Select'
 import { Toggle } from '@/ui/Toggle'
 import { Icon } from '@/ui/Icon'
 import { icons } from '@/ui/icons'
+import { SupertonicDownload } from './settings/SupertonicDownload'
 
 export function SettingsScreen() {
   const navigate = useNavigate()
@@ -205,7 +206,7 @@ export function SettingsScreen() {
             <Select
               ariaLabel="Speech engine"
               value={tts.engineId}
-              onChange={(engineId) => setTts({ engineId, voiceId: '' })}
+              onChange={(engineId) => setTts({ engineId, voiceId: '', engineChosen: true })}
               options={engineOptions}
             />
           </div>
@@ -259,11 +260,7 @@ export function SettingsScreen() {
               onChange={(autoAdvance) => setTts({ autoAdvance })}
             />
           </div>
-          <p className="muted" style={{ fontSize: 12 }}>
-            Supertonic runs fully on-device. Drop its model assets into
-            <code> public/supertonic</code> (see scripts/fetch-supertonic.sh) to
-            enable it; until then the system voice is used.
-          </p>
+          <SupertonicDownload />
         </section>
 
         <section className="settings-section">
