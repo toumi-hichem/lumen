@@ -39,6 +39,8 @@ export interface ReadingPreferences {
   keepAwake: boolean
   /** Auto-scroll speed in pixels per second (scrolled/text content). */
   autoScrollSpeed: number
+  /** Ordered list of action IDs shown in the reader footer action bar. */
+  footerActionIds: string[]
 }
 
 export interface TtsPreferences {
@@ -80,6 +82,7 @@ export const defaultSettings: AppSettings = {
     softWrap: true,
     keepAwake: false,
     autoScrollSpeed: 30,
+    footerActionIds: ['theme', 'tts', 'autoscroll', 'toc', 'bookmarks', 'search', 'settings', 'footer-settings'],
   },
   tts: {
     engineId: 'web-speech',

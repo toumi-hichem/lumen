@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { TtsController, type TtsStatus } from '@/tts/controller'
-import { setMediaPlaybackState, setupMediaSession } from '@/tts/mediaSession'
+import { setMediaPlaybackState, setupMediaSession, updateMediaSessionLine } from '@/tts/mediaSession'
 import { useSettingsStore } from '@/store/settingsStore'
 import type { SpeakableChunk } from '@/reader/types'
 
 export interface UseTtsOptions {
   bookTitle?: string
   author?: string
+  coverUrl?: string
   /** Called when narration finishes all chunks naturally (for auto-advance). */
   onComplete?: () => void
   /** Skip to the next chapter (lock-screen "next"). */
@@ -21,8 +22,10 @@ export interface ReaderTtsApi {
   activeEngineId: string
   error?: string
   chunks: SpeakableChunk[]
-  /** Minutes remaining on the sleep timer, or null if off. */
+  /** Minutes set on the sleep timer, or null if off. */
   sleepMinutes: number | null
+  /** Seconds remaining on the sleep timer, updated every second. */
+  sleepSecondsRemaining: number | null
   start: (chunks: SpeakableChunk[], startIndex?: number) => void
   pause: () => void
   resume: () => void
@@ -39,11 +42,20 @@ export function useTts(options: UseTtsOptions = {}): ReaderTtsApi {
   const [error, setError] = useState<string>()
   const [chunks, setChunks] = useState<SpeakableChunk[]>([])
   const [sleepMinutes, setSleepMinutes] = useState<number | null>(null)
-  const sleepTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const [sleepSecondsRemaining, setSleepSecondsRemaining] = useState<number | null>(null)
 
-  // Keep the latest onComplete without re-creating the controller.
+  const sleepTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const sleepCountdown = useRef<ReturnType<typeof setInterval>>(undefined)
+  const sleepEndTime = useRef<number | null>(null)
+
+  // Stabilise callbacks via refs so the media session effect doesn't re-fire
+  // on every render and the TtsController never captures stale closures.
   const onCompleteRef = useRef(options.onComplete)
   onCompleteRef.current = options.onComplete
+  const onNextRef = useRef(options.onNext)
+  onNextRef.current = options.onNext
+  const onPrevRef = useRef(options.onPrev)
+  onPrevRef.current = options.onPrev
 
   const controllerRef = useRef<TtsController | null>(null)
   if (controllerRef.current == null) {
@@ -73,26 +85,38 @@ export function useTts(options: UseTtsOptions = {}): ReaderTtsApi {
     })
   }, [tts.rate, tts.pitch, tts.voiceId])
 
+  // Update OS notification with the current spoken line.
+  useEffect(() => {
+    if (status === 'playing' && chunks[chunkIndex]) {
+      updateMediaSessionLine(chunks[chunkIndex].text)
+    }
+  }, [chunkIndex, chunks, status])
+
   // Lock-screen / headset media controls.
   useEffect(() => {
     const controller = controllerRef.current
     if (!controller) return
+    const artwork: MediaImage[] = options.coverUrl
+      ? [{ src: options.coverUrl, sizes: '256x256', type: 'image/jpeg' }]
+      : []
     return setupMediaSession({
       title: options.bookTitle ?? 'Lumen',
       artist: options.author,
+      artwork,
       onPlay: () => void controller.resume(),
       onPause: () => controller.pause(),
       onStop: () => controller.stop(),
-      onNext: () => options.onNext?.(),
-      onPrev: () => options.onPrev?.(),
+      onNext: () => onNextRef.current?.(),
+      onPrev: () => onPrevRef.current?.(),
     })
-    // Re-register only when the displayed metadata/handlers change.
+    // Re-register only when the displayed metadata changes, not on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [options.bookTitle, options.author, options.onNext, options.onPrev])
+  }, [options.bookTitle, options.author, options.coverUrl])
 
   useEffect(() => {
     return () => {
       clearTimeout(sleepTimer.current)
+      clearInterval(sleepCountdown.current)
       controllerRef.current?.dispose()
     }
   }, [])
@@ -109,15 +133,33 @@ export function useTts(options: UseTtsOptions = {}): ReaderTtsApi {
 
   const setSleepTimer = (minutes: number | null) => {
     clearTimeout(sleepTimer.current)
+    clearInterval(sleepCountdown.current)
     setSleepMinutes(minutes)
+    sleepEndTime.current = null
+
     if (minutes && minutes > 0) {
-      sleepTimer.current = setTimeout(
-        () => {
-          controllerRef.current?.pause()
-          setSleepMinutes(null)
-        },
-        minutes * 60 * 1000,
-      )
+      const endMs = Date.now() + minutes * 60 * 1000
+      sleepEndTime.current = endMs
+      setSleepSecondsRemaining(minutes * 60)
+
+      sleepTimer.current = setTimeout(() => {
+        controllerRef.current?.pause()
+        setSleepMinutes(null)
+        setSleepSecondsRemaining(null)
+        sleepEndTime.current = null
+      }, minutes * 60 * 1000)
+
+      sleepCountdown.current = setInterval(() => {
+        if (sleepEndTime.current === null) {
+          clearInterval(sleepCountdown.current)
+          return
+        }
+        const remaining = Math.max(0, Math.round((sleepEndTime.current - Date.now()) / 1000))
+        setSleepSecondsRemaining(remaining)
+        if (remaining === 0) clearInterval(sleepCountdown.current)
+      }, 1000)
+    } else {
+      setSleepSecondsRemaining(null)
     }
   }
 
@@ -128,6 +170,7 @@ export function useTts(options: UseTtsOptions = {}): ReaderTtsApi {
     error,
     chunks,
     sleepMinutes,
+    sleepSecondsRemaining,
     start,
     pause: () => controllerRef.current?.pause(),
     resume: () => void controllerRef.current?.resume(),

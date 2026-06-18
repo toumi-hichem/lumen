@@ -12,6 +12,7 @@ import {
 import { getErrorMessage } from '@/lib/result'
 import { Select, type SelectOption } from '@/ui/Select'
 import { Toggle } from '@/ui/Toggle'
+import { Slider } from '@/ui/Slider'
 import { Icon } from '@/ui/Icon'
 import { icons } from '@/ui/icons'
 import { SupertonicDownload } from './settings/SupertonicDownload'
@@ -121,63 +122,68 @@ export function SettingsScreen() {
         <section className="settings-section">
           <h2>Reading</h2>
           <Slider
-            label={`Font size — ${Math.round(reading.fontScale * 100)}%`}
+            label="Font size"
             min={0.8}
             max={1.8}
             step={0.05}
             value={reading.fontScale}
             onChange={(fontScale) => setReading({ fontScale })}
+            formatValue={(v) => `${Math.round(v * 100)}%`}
           />
           <Slider
-            label={`Line height — ${reading.lineHeight.toFixed(2)}`}
+            label="Line height"
             min={1.2}
             max={2.2}
             step={0.05}
             value={reading.lineHeight}
             onChange={(lineHeight) => setReading({ lineHeight })}
+            formatValue={(v) => v.toFixed(2)}
           />
           <Slider
-            label={`Margin — ${reading.margin}px`}
+            label="Margin"
             min={0}
             max={72}
             step={4}
             value={reading.margin}
             onChange={(margin) => setReading({ margin })}
+            formatValue={(v) => `${v}px`}
           />
           <Slider
-            label={`Brightness — ${Math.round(reading.brightness * 100)}%`}
+            label="Brightness"
             min={0.4}
             max={1}
             step={0.05}
             value={reading.brightness}
             onChange={(brightness) => setReading({ brightness })}
+            formatValue={(v) => `${Math.round(v * 100)}%`}
           />
           <Slider
-            label={`Warmth — ${Math.round(reading.warmth * 100)}%`}
+            label="Warmth"
             min={0}
             max={1}
             step={0.05}
             value={reading.warmth}
             onChange={(warmth) => setReading({ warmth })}
+            formatValue={(v) => `${Math.round(v * 100)}%`}
           />
         </section>
 
         <section className="settings-section">
           <h2>Layout</h2>
           <div className="setting-row">
-            <span>Page mode</span>
+            <span>Reading mode</span>
             <div className="font-options">
               <button
                 className={`chip ${reading.flow === 'paginated' ? 'active' : ''}`}
                 onClick={() => setReading({ flow: 'paginated' })}
               >
-                Paginated
+                Page by page
               </button>
               <button
                 className={`chip ${reading.flow === 'scrolled' ? 'active' : ''}`}
                 onClick={() => setReading({ flow: 'scrolled' })}
               >
-                Scrolled
+                Continuous scroll
               </button>
             </div>
           </div>
@@ -210,12 +216,13 @@ export function SettingsScreen() {
             />
           </div>
           <Slider
-            label={`Auto-scroll speed — ${reading.autoScrollSpeed} px/s`}
+            label="Auto-scroll speed"
             min={10}
             max={120}
             step={5}
             value={reading.autoScrollSpeed}
             onChange={(autoScrollSpeed) => setReading({ autoScrollSpeed })}
+            formatValue={(v) => `${v} px/s`}
           />
         </section>
 
@@ -237,21 +244,23 @@ export function SettingsScreen() {
           </div>
           {reading.bionicReading && (
             <Slider
-              label={`Fixation strength — ${Math.round(reading.bionicStrength * 100)}%`}
+              label="Fixation strength"
               min={0.3}
               max={0.7}
               step={0.05}
               value={reading.bionicStrength}
               onChange={(bionicStrength) => setReading({ bionicStrength })}
+              formatValue={(v) => `${Math.round(v * 100)}%`}
             />
           )}
           <Slider
-            label={`Letter spacing — ${reading.letterSpacing.toFixed(2)}em`}
+            label="Letter spacing"
             min={0}
             max={0.2}
             step={0.01}
             value={reading.letterSpacing}
             onChange={(letterSpacing) => setReading({ letterSpacing })}
+            formatValue={(v) => `${v.toFixed(2)}em`}
           />
           <div className="setting-row">
             <span>Hide inline images</span>
@@ -296,20 +305,22 @@ export function SettingsScreen() {
             />
           </div>
           <Slider
-            label={`Speed — ${tts.rate.toFixed(2)}×`}
+            label="Speed"
             min={0.5}
             max={2}
             step={0.05}
             value={tts.rate}
             onChange={(rate) => setTts({ rate })}
+            formatValue={(v) => `${v.toFixed(2)}×`}
           />
           <Slider
-            label={`Pitch — ${tts.pitch.toFixed(2)}`}
+            label="Pitch"
             min={0}
             max={2}
             step={0.05}
             value={tts.pitch}
             onChange={(pitch) => setTts({ pitch })}
+            formatValue={(v) => v.toFixed(2)}
           />
           <div className="setting-row">
             <span>Read by</span>
@@ -372,31 +383,6 @@ export function SettingsScreen() {
           </p>
         </section>
       </main>
-    </div>
-  )
-}
-
-interface SliderProps {
-  label: string
-  min: number
-  max: number
-  step: number
-  value: number
-  onChange: (value: number) => void
-}
-
-function Slider({ label, min, max, step, value, onChange }: SliderProps) {
-  return (
-    <div className="range-row">
-      <label>{label}</label>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-      />
     </div>
   )
 }

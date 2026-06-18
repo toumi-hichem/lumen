@@ -1,6 +1,7 @@
 interface MediaSessionConfig {
   title: string
   artist?: string
+  artwork?: MediaImage[]
   onPlay: () => void
   onPause: () => void
   onStop: () => void
@@ -23,6 +24,7 @@ export function setupMediaSession(config: MediaSessionConfig): () => void {
   ms.metadata = new MediaMetadata({
     title: config.title,
     artist: config.artist ?? 'Lumen',
+    artwork: config.artwork,
   })
 
   const handlers: Array<[MediaSessionAction, MediaSessionActionHandler]> = [
@@ -58,4 +60,19 @@ export function setMediaPlaybackState(
   if (typeof navigator !== 'undefined' && 'mediaSession' in navigator) {
     navigator.mediaSession.playbackState = state
   }
+}
+
+/**
+ * Update the subtitle shown in the OS notification with the currently-spoken
+ * line without re-registering all action handlers.
+ */
+export function updateMediaSessionLine(line: string): void {
+  if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return
+  const ms = navigator.mediaSession
+  if (!ms.metadata) return
+  ms.metadata = new MediaMetadata({
+    title: ms.metadata.title,
+    artist: line || (ms.metadata.artist ?? 'Lumen'),
+    artwork: Array.from(ms.metadata.artwork ?? []),
+  })
 }

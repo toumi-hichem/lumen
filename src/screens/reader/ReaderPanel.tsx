@@ -2,7 +2,9 @@ import { useState } from 'react'
 import type { Bookmark, Highlight } from '@/domain/models'
 import type { SearchHit, TocItem } from '@/reader/types'
 
-type Tab = 'toc' | 'bookmarks' | 'highlights' | 'search'
+export type PanelTab = 'toc' | 'bookmarks' | 'highlights' | 'search'
+
+type Tab = PanelTab
 
 interface ReaderPanelProps {
   toc: TocItem[]
@@ -14,6 +16,7 @@ interface ReaderPanelProps {
   onRemoveHighlight: (id: string) => void
   onEditHighlightNote: (id: string, note: string) => void
   onClose: () => void
+  defaultTab?: Tab
 }
 
 /** Slide-in navigation panel with TOC, bookmarks and highlights tabs. */
@@ -27,8 +30,9 @@ export function ReaderPanel({
   onRemoveHighlight,
   onEditHighlightNote,
   onClose,
+  defaultTab,
 }: ReaderPanelProps) {
-  const [tab, setTab] = useState<Tab>('toc')
+  const [tab, setTab] = useState<Tab>(defaultTab ?? 'toc')
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchHit[]>([])
   const [searching, setSearching] = useState(false)

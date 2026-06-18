@@ -15,6 +15,8 @@ interface SelectProps {
   onChange: (value: string) => void
   ariaLabel: string
   className?: string
+  /** Open the popover above the trigger instead of below. */
+  upward?: boolean
 }
 
 /**
@@ -22,7 +24,7 @@ interface SelectProps {
  * native (unstyleable) `<select>`. Keyboard accessible: Enter/Space/ArrowDown
  * opens, arrows move, Enter selects, Escape closes.
  */
-export function Select({ value, options, onChange, ariaLabel, className }: SelectProps) {
+export function Select({ value, options, onChange, ariaLabel, className, upward }: SelectProps) {
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -105,7 +107,7 @@ export function Select({ value, options, onChange, ariaLabel, className }: Selec
         <Icon path={icons.chevronDown} size={16} className="select-caret" />
       </button>
       {open && (
-        <ul className="select-popover" role="listbox" id={listId} aria-label={ariaLabel}>
+        <ul className={`select-popover${upward ? ' upward' : ''}`} role="listbox" id={listId} aria-label={ariaLabel}>
           {options.map((o, i) => (
             <li
               key={o.value}

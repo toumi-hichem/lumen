@@ -459,17 +459,36 @@
 
 /* --- Reader --- */
 .reader {
-  display: flex;
-  flex-direction: column;
+  position: relative;
   height: 100%;
   overflow: hidden;
   background: var(--reader-page-background, var(--color-background));
 }
 
+/* Header overlaid on content so the viewport always fills the full screen. */
+.reader > .appbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
 .reader-viewport {
-  flex: 1;
-  position: relative;
+  position: absolute;
+  inset: 0;
   overflow: hidden;
+}
+
+/* Footer wraps the progress bar and action bar together. */
+.reader-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  transition: opacity 0.25s ease, transform 0.25s ease;
 }
 
 .reader-tap-zone {
@@ -483,11 +502,16 @@
 .reader-tap-zone.right { right: 0; }
 .reader-tap-zone.center { width: auto; }
 
-/* Distraction-free mode hides the chrome; tap the center again to restore. */
-.reader.immersive .appbar,
-.reader.immersive .reader-progress,
-.reader.immersive .tts-bar {
-  display: none;
+/* Immersive mode — slide header up and footer down instead of display:none. */
+.reader.immersive > .appbar {
+  opacity: 0;
+  transform: translateY(-100%);
+  pointer-events: none;
+}
+.reader.immersive .reader-footer {
+  opacity: 0;
+  transform: translateY(100%);
+  pointer-events: none;
 }
 
 .reader-overlay {
@@ -600,22 +624,206 @@
   -webkit-touch-callout: none;
 }
 
-/* --- TTS bar --- */
-.tts-bar {
+/* --- Reader action bar (footer icon strip) --- */
+.reader-action-bar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
+  justify-content: space-around;
+  padding: 6px 8px;
+  padding-bottom: calc(6px + env(safe-area-inset-bottom));
   background: var(--color-surface);
   border-top: 1px solid var(--color-border);
+  gap: 2px;
 }
-.tts-bar .tts-label {
+
+.reader-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
   flex: 1;
-  font-size: 13px;
+  padding: 6px 2px;
+  border: none;
+  background: transparent;
   color: var(--color-text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 0.15s ease;
+  min-width: 0;
+}
+.reader-action.active {
+  color: var(--color-primary);
+}
+.reader-action-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background 0.15s ease;
+}
+.reader-action.active .reader-action-icon {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+}
+.reader-action-label {
+  font-size: 10px;
+  font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* --- Footer drill-down panels (TTS, autoscroll, footer settings) --- */
+.reader-footer-panel {
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  padding: 16px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  max-height: 65vh;
+  overflow-y: auto;
+}
+.reader-footer-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.reader-footer-panel-title {
+  font-size: 15px;
+  font-weight: 600;
+  flex: 1;
+}
+.reader-footer-tts-controls {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+/* Sleep timer countdown pill */
+.tts-timer-display {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Screen lock overlay --- */
+.screen-lock-btn {
+  position: absolute;
+  top: calc(12px + env(safe-area-inset-top));
+  right: 16px;
+  z-index: 15;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.35);
+  color: rgba(255, 255, 255, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+.screen-lock-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 16;
+  background: rgba(0, 0, 0, 0.14);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  cursor: pointer;
+}
+.screen-lock-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.screen-lock-timer {
+  font-size: 36px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.85);
+  letter-spacing: -0.02em;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+}
+
+/* --- Custom Slider --- */
+.slider-wrap {
+  padding: 12px 0;
+}
+.slider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 10px;
+}
+.slider-label {
+  font-size: 14px;
+}
+.slider-value {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.slider-track-wrap {
+  position: relative;
+  height: 20px;
+}
+.slider-track-bg,
+.slider-track-fill {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 4px;
+  border-radius: 999px;
+  pointer-events: none;
+}
+.slider-track-bg {
+  left: 0;
+  right: 0;
+  background: var(--color-surface-alt);
+}
+.slider-track-fill {
+  left: 0;
+  background: var(--color-primary);
+}
+.slider-thumb {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  border: 3px solid var(--color-surface);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25),
+    0 0 0 1px color-mix(in srgb, var(--color-primary) 25%, transparent);
+  pointer-events: none;
+}
+.slider-native {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  margin: 0;
+  padding: 0;
 }
 
 /* --- Side panel (TOC / bookmarks / highlights) --- */
@@ -818,6 +1026,10 @@
 .select-option-check {
   color: var(--color-primary);
   flex-shrink: 0;
+}
+.select-popover.upward {
+  top: auto;
+  bottom: calc(100% + 4px);
 }
 
 /* --- Toggle switch --- */
