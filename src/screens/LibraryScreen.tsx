@@ -1,3 +1,4 @@
+import { Check } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLibraryStore } from '@/store/libraryStore'
@@ -289,7 +290,7 @@ function BookCard({
           {collections.length > 0 && <div className="card-menu-section">Shelves</div>}
           {collections.map((c) => (
             <button key={c.id} className="list-item" onClick={() => onToggleShelf(c.id)}>
-              {(book.collectionIds ?? []).includes(c.id) ? '✓ ' : ''}
+              {(book.collectionIds ?? []).includes(c.id) && <Check size={14} />}
               {c.name}
             </button>
           ))}

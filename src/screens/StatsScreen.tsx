@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sessionRepository } from '@/storage/sessionRepository'
@@ -23,8 +24,8 @@ export function StatsScreen() {
   return (
     <div className="app">
       <header className="appbar">
-        <button className="btn" onClick={() => navigate(-1)} aria-label="Back">
-          ←
+        <button className="btn btn-icon" onClick={() => navigate(-1)} aria-label="Back">
+          <ArrowLeft size={18} />
         </button>
         <h1>Reading stats</h1>
       </header>

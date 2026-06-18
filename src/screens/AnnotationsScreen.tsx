@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Book, Highlight, HighlightColor } from '@/domain/models'
@@ -54,8 +55,8 @@ export function AnnotationsScreen() {
   return (
     <div className="app">
       <header className="appbar">
-        <button className="btn" onClick={() => navigate(-1)} aria-label="Back">
-          ←
+        <button className="btn btn-icon" onClick={() => navigate(-1)} aria-label="Back">
+          <ArrowLeft size={18} />
         </button>
         <h1>Highlights</h1>
         <button className="btn" onClick={exportMd} disabled={!filtered.length}>
