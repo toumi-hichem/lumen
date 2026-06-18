@@ -55,7 +55,7 @@ export interface TtsEngineDescriptor {
 
 export class TtsNotAvailableError extends Error {
   constructor(engineId: string, reason: string) {
-    super(`TTS engine "${engineId}" is unavailable: ${reason}`)
+    super(`Voice reading is not supported on this device (${engineId}: ${reason})`)
     this.name = 'TtsNotAvailableError'
   }
 }

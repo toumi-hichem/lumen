@@ -58,6 +58,10 @@ export class TtsController {
         this.events.onEngineResolved?.(resolved)
         return resolved
       })
+      .catch((err: unknown) => {
+        this.setStatus('idle')
+        throw err
+      })
       .finally(() => { this.initPromise = null })
     return this.initPromise
   }
@@ -68,7 +72,13 @@ export class TtsController {
     options: SpeakOptions,
     startIndex = 0,
   ): Promise<void> {
-    if (!this.engine?.isReady()) await this.useEngine(this.engineId || DEFAULT_ENGINE_ID)
+    if (!this.engine?.isReady()) {
+      try {
+        await this.useEngine(this.engineId || DEFAULT_ENGINE_ID)
+      } catch {
+        return // onError already reported via events
+      }
+    }
     this.chunks = chunks
     this.index = Math.max(0, Math.min(startIndex, chunks.length - 1))
     this.options = options
