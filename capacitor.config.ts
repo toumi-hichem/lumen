@@ -8,6 +8,12 @@ const config: CapacitorConfig = {
   server: {
     androidScheme: 'https',
   },
+  android: {
+    backgroundColor: '#F7F8FA',
+  },
+  ios: {
+    backgroundColor: '#F7F8FA',
+  },
 }
 
 export default config

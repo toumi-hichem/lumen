@@ -261,6 +261,18 @@ export function SettingsScreen() {
               onChange={(hideImages) => setReading({ hideImages })}
             />
           </div>
+          <div className="setting-row">
+            <span>
+              Soft wrap
+              <br />
+              <small className="muted">Wraps long lines instead of overflowing horizontally.</small>
+            </span>
+            <Toggle
+              ariaLabel="Soft wrap"
+              checked={reading.softWrap}
+              onChange={(softWrap) => setReading({ softWrap })}
+            />
+          </div>
         </section>
 
         <section className="settings-section">

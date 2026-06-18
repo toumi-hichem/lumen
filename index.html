@@ -8,6 +8,33 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no"
     />
     <meta name="theme-color" content="#F7F8FA" />
+    <script>
+      (function () {
+        var DARK = ['midnight', 'carbon', 'nord', 'forest', 'dusk']
+        var BG = {
+          daylight: '#F7F8FA', sepia: '#EFE6D6', midnight: '#14181F',
+          carbon: '#000000', solarized: '#FDF6E3', nord: '#2E3440',
+          contrast: '#FFFFFF', forest: '#121A14', dusk: '#181527', 'e-ink': '#EDEDEA',
+        }
+        var id = null
+        try {
+          var raw = localStorage.getItem('lumen.settings.v1')
+          if (raw) {
+            var s = JSON.parse(raw)
+            id = (s && s.reading && s.reading.themeId) || null
+          }
+        } catch (_) {}
+        if (!id) {
+          id = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'midnight' : 'daylight'
+        }
+        var root = document.documentElement
+        root.setAttribute('data-theme', id)
+        root.style.colorScheme = DARK.indexOf(id) !== -1 ? 'dark' : 'light'
+        var meta = document.querySelector('meta[name="theme-color"]')
+        if (meta) meta.setAttribute('content', BG[id] || '#F7F8FA')
+      })()
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

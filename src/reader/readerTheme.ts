@@ -22,6 +22,7 @@ export function buildReaderTheme(
     justify: reading.justify,
     letterSpacing: reading.letterSpacing,
     hideImages: reading.hideImages,
+    softWrap: reading.softWrap,
     bionic: { enabled: reading.bionicReading, strength: reading.bionicStrength },
   }
 }

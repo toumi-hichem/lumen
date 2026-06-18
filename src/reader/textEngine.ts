@@ -127,6 +127,7 @@ export class TextEngine implements BookEngine {
       ? `${theme.letterSpacing}em`
       : ''
     this.content.classList.toggle('hide-images', theme.hideImages)
+    this.content.classList.toggle('soft-wrap', theme.softWrap)
 
     // Bionic reading mutates the DOM, so only re-populate when it actually
     // changes (preserving scroll position and re-applying highlights).

@@ -17,6 +17,8 @@ export function applyThemeVars(
   // Drive native form controls / scrollbars to match the theme mode.
   target.style.setProperty('color-scheme', theme.mode)
   target.dataset.theme = theme.id
+  const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+  if (meta) meta.content = theme.tokens.color.background
 }
 
 /** Apply reading typography preferences as CSS variables. */

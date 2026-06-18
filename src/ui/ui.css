@@ -503,6 +503,17 @@
   display: none !important;
 }
 
+/* Soft wrap: prevent horizontal overflow on long lines and code blocks. */
+.text-engine-content.soft-wrap,
+.text-engine-content.soft-wrap * {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.text-engine-content.soft-wrap pre,
+.text-engine-content.soft-wrap code {
+  white-space: pre-wrap;
+}
+
 .pdf-page {
   min-height: 600px;
   margin: 0 auto 12px;
@@ -964,6 +975,9 @@
   .appbar {
     gap: 8px;
     padding: 10px 12px;
+    padding-top: calc(10px + env(safe-area-inset-top));
+    padding-left: calc(12px + env(safe-area-inset-left));
+    padding-right: calc(12px + env(safe-area-inset-right));
   }
 }
 

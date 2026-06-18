@@ -72,6 +72,8 @@ export interface ReaderTheme {
   letterSpacing: number
   /** Hide inline images. */
   hideImages: boolean
+  /** Force text to wrap; prevents horizontal scrolling on long lines. */
+  softWrap: boolean
   /** Bionic reading (bold word prefixes); applied by text/MOBI engines. */
   bionic: { enabled: boolean; strength: number }
 }

@@ -33,6 +33,8 @@ export interface ReadingPreferences {
   letterSpacing: number
   /** Hide inline images to reduce visual clutter. */
   hideImages: boolean
+  /** Force text to wrap instead of overflowing horizontally. */
+  softWrap: boolean
   /** Keep the screen awake while reading. */
   keepAwake: boolean
   /** Auto-scroll speed in pixels per second (scrolled/text content). */
@@ -75,6 +77,7 @@ export const defaultSettings: AppSettings = {
     bionicStrength: 0.5,
     letterSpacing: 0,
     hideImages: false,
+    softWrap: true,
     keepAwake: false,
     autoScrollSpeed: 30,
   },

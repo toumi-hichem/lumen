@@ -14,8 +14,8 @@ export default defineConfig({
         name: 'Lumen Reader',
         short_name: 'Lumen',
         description: 'Cross-platform ebook reader with on-device TTS',
-        theme_color: '#16181d',
-        background_color: '#16181d',
+        theme_color: '#F7F8FA',
+        background_color: '#F7F8FA',
         display: 'standalone',
         icons: [
           { src: 'favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
@@ -38,6 +38,9 @@ export default defineConfig({
   // and don't try to pre-bundle them so the Supertonic engine can lazy-load.
   optimizeDeps: {
     exclude: ['onnxruntime-web'],
+  },
+  server: {
+    host: true,
   },
   build: {
     target: 'es2022',

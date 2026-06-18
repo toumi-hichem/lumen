@@ -194,6 +194,18 @@ export class EpubEngine implements BookEngine {
       ...(theme.hideImages
         ? { 'img, svg, image': { display: 'none !important' } }
         : {}),
+      ...(theme.softWrap
+        ? {
+            'body, p, div, td, li': {
+              'overflow-wrap': 'break-word !important',
+              'word-break': 'break-word !important',
+            },
+            'pre, code': {
+              'white-space': 'pre-wrap !important',
+              'overflow-wrap': 'break-word !important',
+            },
+          }
+        : {}),
     })
     this.rendition.themes.select(THEME_NAME)
     this.rendition.themes.fontSize(`${theme.fontSizePercent}%`)
