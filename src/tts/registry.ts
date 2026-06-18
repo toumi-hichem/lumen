@@ -1,6 +1,8 @@
+import { Capacitor } from '@capacitor/core'
 import { platform } from '@/lib/platform'
 import { WebSpeechEngine } from './webSpeechEngine'
 import { SupertonicEngine } from './supertonicEngine'
+import { NativeTtsEngine } from './nativeTtsEngine'
 import type { TtsEngine, TtsEngineDescriptor } from './types'
 
 type EngineFactory = () => TtsEngine
@@ -24,6 +26,14 @@ const engines = new Map<string, RegisteredEngine>()
 export function registerTtsEngine(entry: RegisteredEngine): void {
   engines.set(entry.id, entry)
 }
+
+registerTtsEngine({
+  id: 'native-tts',
+  name: 'Device Voice',
+  requiresAssets: false,
+  factory: () => new NativeTtsEngine(),
+  available: () => Capacitor.isNativePlatform(),
+})
 
 registerTtsEngine({
   id: 'web-speech',

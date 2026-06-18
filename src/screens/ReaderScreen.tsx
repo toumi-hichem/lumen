@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useReader } from './reader/useReader'
 import { useTts } from './reader/useTts'
@@ -28,9 +28,21 @@ export function ReaderScreen() {
   const setReading = useSettingsStore((s) => s.setReading)
   const [panelOpen, setPanelOpen] = useState(false)
   const [panelTab, setPanelTab] = useState<PanelTab>('toc')
+  const appbarRef = useRef<HTMLElement>(null)
   const [immersive, setImmersive] = useState(false)
   const [autoScroll, setAutoScroll] = useState(false)
   const [locked, setLocked] = useState(false)
+
+  useLayoutEffect(() => {
+    const el = appbarRef.current
+    if (!el) return
+    const update = () =>
+      document.documentElement.style.setProperty('--appbar-height', `${el.offsetHeight}px`)
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   const format = reader.book?.format
   const canAutoScroll = format === 'text' || format === 'mobi' || format === 'azw3'
@@ -182,7 +194,7 @@ export function ReaderScreen() {
 
   return (
     <div className={`reader ${immersive ? 'immersive' : ''}`}>
-      <header className="appbar">
+      <header className="appbar" ref={appbarRef}>
         <button
           className="btn btn-icon"
           onClick={() => navigate('/')}
@@ -301,20 +313,20 @@ export function ReaderScreen() {
         />
       </div>
 
-      {panelOpen && (
-        <ReaderPanel
-          toc={reader.toc}
-          bookmarks={reader.bookmarks}
-          highlights={reader.highlights}
-          onNavigate={reader.goTo}
-          onSearch={reader.search}
-          onRemoveBookmark={reader.removeBookmark}
-          onRemoveHighlight={reader.removeHighlight}
-          onEditHighlightNote={reader.setHighlightNote}
-          onClose={() => setPanelOpen(false)}
-          defaultTab={panelTab}
-        />
-      )}
+      <ReaderPanel
+        open={panelOpen}
+        activeTab={panelTab}
+        onTabChange={setPanelTab}
+        toc={reader.toc}
+        bookmarks={reader.bookmarks}
+        highlights={reader.highlights}
+        onNavigate={reader.goTo}
+        onSearch={reader.search}
+        onRemoveBookmark={reader.removeBookmark}
+        onRemoveHighlight={reader.removeHighlight}
+        onEditHighlightNote={reader.setHighlightNote}
+        onClose={() => setPanelOpen(false)}
+      />
     </div>
   )
 }

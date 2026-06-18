@@ -142,13 +142,21 @@ export class TtsController {
       await engine.init()
       this.engine = engine
       return engine.id
-    } catch (error) {
-      this.events.onError?.(getErrorMessage(error))
-      if (id === DEFAULT_ENGINE_ID) throw error
-      const fallback = createTtsEngine(DEFAULT_ENGINE_ID)
-      await fallback.init()
-      this.engine = fallback
-      return fallback.id
+    } catch (primary) {
+      if (id === DEFAULT_ENGINE_ID) {
+        this.events.onError?.(getErrorMessage(primary))
+        throw primary
+      }
+      // Preferred engine unavailable — try the default silently.
+      try {
+        const fallback = createTtsEngine(DEFAULT_ENGINE_ID)
+        await fallback.init()
+        this.engine = fallback
+        return fallback.id
+      } catch (fallbackError) {
+        this.events.onError?.(getErrorMessage(fallbackError))
+        throw fallbackError
+      }
     }
   }
 

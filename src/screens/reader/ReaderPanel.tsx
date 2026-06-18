@@ -4,9 +4,10 @@ import type { SearchHit, TocItem } from '@/reader/types'
 
 export type PanelTab = 'toc' | 'bookmarks' | 'highlights' | 'search'
 
-type Tab = PanelTab
-
 interface ReaderPanelProps {
+  open: boolean
+  activeTab: PanelTab
+  onTabChange: (tab: PanelTab) => void
   toc: TocItem[]
   bookmarks: Bookmark[]
   highlights: Highlight[]
@@ -16,11 +17,12 @@ interface ReaderPanelProps {
   onRemoveHighlight: (id: string) => void
   onEditHighlightNote: (id: string, note: string) => void
   onClose: () => void
-  defaultTab?: Tab
 }
 
-/** Slide-in navigation panel with TOC, bookmarks and highlights tabs. */
 export function ReaderPanel({
+  open,
+  activeTab,
+  onTabChange,
   toc,
   bookmarks,
   highlights,
@@ -30,9 +32,7 @@ export function ReaderPanel({
   onRemoveHighlight,
   onEditHighlightNote,
   onClose,
-  defaultTab,
 }: ReaderPanelProps) {
-  const [tab, setTab] = useState<Tab>(defaultTab ?? 'toc')
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchHit[]>([])
   const [searching, setSearching] = useState(false)
@@ -45,37 +45,41 @@ export function ReaderPanel({
   }
 
   return (
-    <div className="panel-overlay" onClick={onClose}>
+    <div
+      className={`panel-overlay${open ? ' open' : ''}`}
+      onClick={onClose}
+      aria-hidden={!open}
+    >
       <aside className="panel" onClick={(e) => e.stopPropagation()}>
         <div className="panel-tabs">
           <button
-            className={tab === 'toc' ? 'active' : ''}
-            onClick={() => setTab('toc')}
+            className={activeTab === 'toc' ? 'active' : ''}
+            onClick={() => onTabChange('toc')}
           >
             Contents
           </button>
           <button
-            className={tab === 'bookmarks' ? 'active' : ''}
-            onClick={() => setTab('bookmarks')}
+            className={activeTab === 'bookmarks' ? 'active' : ''}
+            onClick={() => onTabChange('bookmarks')}
           >
             Marks
           </button>
           <button
-            className={tab === 'highlights' ? 'active' : ''}
-            onClick={() => setTab('highlights')}
+            className={activeTab === 'highlights' ? 'active' : ''}
+            onClick={() => onTabChange('highlights')}
           >
             Notes
           </button>
           <button
-            className={tab === 'search' ? 'active' : ''}
-            onClick={() => setTab('search')}
+            className={activeTab === 'search' ? 'active' : ''}
+            onClick={() => onTabChange('search')}
           >
             Search
           </button>
         </div>
 
         <div className="panel-list">
-          {tab === 'toc' &&
+          {activeTab === 'toc' &&
             (toc.length ? (
               toc.map((item, i) => (
                 <button
@@ -94,7 +98,7 @@ export function ReaderPanel({
               <p className="muted">No table of contents.</p>
             ))}
 
-          {tab === 'bookmarks' &&
+          {activeTab === 'bookmarks' &&
             (bookmarks.length ? (
               bookmarks.map((bm) => (
                 <div key={bm.id} className="list-item">
@@ -121,7 +125,7 @@ export function ReaderPanel({
               <p className="muted">No bookmarks yet.</p>
             ))}
 
-          {tab === 'highlights' &&
+          {activeTab === 'highlights' &&
             (highlights.length ? (
               highlights.map((hl) => (
                 <div key={hl.id} className="list-item">
@@ -167,7 +171,7 @@ export function ReaderPanel({
               <p className="muted">No highlights yet.</p>
             ))}
 
-          {tab === 'search' && (
+          {activeTab === 'search' && (
             <div>
               <div style={{ display: 'flex', gap: 8, padding: 8 }}>
                 <input

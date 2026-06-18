@@ -835,10 +835,19 @@
 /* --- Side panel (TOC / bookmarks / highlights) --- */
 .panel-overlay {
   position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  top: var(--appbar-height, 52px);
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0);
   z-index: 40;
   display: flex;
+  pointer-events: none;
+  transition: background 0.25s ease;
+}
+.panel-overlay.open {
+  background: rgba(0, 0, 0, 0.4);
+  pointer-events: all;
 }
 .panel {
   width: min(360px, 85vw);
@@ -847,6 +856,11 @@
   border-right: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
+  transform: translateX(-100%);
+  transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.panel-overlay.open .panel {
+  transform: translateX(0);
 }
 .panel-tabs {
   display: flex;
