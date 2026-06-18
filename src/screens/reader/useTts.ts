@@ -74,10 +74,6 @@ export function useTts(options: UseTtsOptions = {}): ReaderTtsApi {
   }
 
   useEffect(() => {
-    void controllerRef.current?.useEngine(tts.engineId)
-  }, [tts.engineId])
-
-  useEffect(() => {
     controllerRef.current?.setOptions({
       rate: tts.rate,
       pitch: tts.pitch,

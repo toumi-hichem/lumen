@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Moon, Sun, Headphones, Pause, Play, Square, Loader2,
   ChevronsDown, List, Bookmark, Search, Settings2,
@@ -89,6 +89,17 @@ export function ReaderActionBar(props: ReaderActionBarProps) {
   const reading = useSettingsStore((s) => s.reading)
   const setReading = useSettingsStore((s) => s.setReading)
 
+  // Open TTS panel automatically when TTS transitions from idle to active
+  // (e.g. triggered from a media session control or the action bar tap).
+  const prevTtsStatusRef = useRef(props.ttsStatus)
+  useEffect(() => {
+    const prev = prevTtsStatusRef.current
+    prevTtsStatusRef.current = props.ttsStatus
+    if (prev === 'idle' && props.ttsStatus !== 'idle') {
+      setMode('tts')
+    }
+  }, [props.ttsStatus])
+
   if (mode === 'tts') {
     return (
       <TtsPanel
@@ -143,10 +154,9 @@ export function ReaderActionBar(props: ReaderActionBarProps) {
         : 'Paused'
         : 'Listen',
       active: ttsActive,
-      disabled: props.ttsStatus === 'loading',
       onClick: () => {
+        setMode('tts')
         if (props.ttsStatus === 'idle') props.onTtsPlay()
-        else setMode('tts')
       },
     },
     autoscroll: {

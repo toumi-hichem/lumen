@@ -28,6 +28,8 @@ export class TtsController {
   private index = 0
   private status: TtsStatus = 'idle'
   private options: SpeakOptions = { rate: 1, pitch: 1 }
+  private initPromise: Promise<string> | null = null
+  private initForId = ''
 
   constructor(private readonly events: TtsControllerEvents = {}) {}
 
@@ -42,14 +44,22 @@ export class TtsController {
   /** Load (and if needed, fall back) the engine identified by `id`. */
   async useEngine(id: string): Promise<string> {
     if (this.engineId === id && this.engine?.isReady()) return id
-    this.stop()
+    // Deduplicate concurrent calls for the same engine (e.g. the eager-init
+    // effect and a play() call racing each other).
+    if (this.initPromise && this.initForId === id) return this.initPromise
+    this.engine?.dispose()
+    this.engine = null
+    this.initForId = id
     this.setStatus('loading')
-
-    const resolved = await this.initEngineWithFallback(id)
-    this.engineId = resolved
-    this.setStatus('idle')
-    this.events.onEngineResolved?.(resolved)
-    return resolved
+    this.initPromise = this.initEngineWithFallback(id)
+      .then((resolved) => {
+        this.engineId = resolved
+        this.setStatus('idle')
+        this.events.onEngineResolved?.(resolved)
+        return resolved
+      })
+      .finally(() => { this.initPromise = null })
+    return this.initPromise
   }
 
   /** Begin reading the supplied chunks from `startIndex`. */
@@ -58,7 +68,7 @@ export class TtsController {
     options: SpeakOptions,
     startIndex = 0,
   ): Promise<void> {
-    if (!this.engine) await this.useEngine(this.engineId || DEFAULT_ENGINE_ID)
+    if (!this.engine?.isReady()) await this.useEngine(this.engineId || DEFAULT_ENGINE_ID)
     this.chunks = chunks
     this.index = Math.max(0, Math.min(startIndex, chunks.length - 1))
     this.options = options

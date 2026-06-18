@@ -39,14 +39,27 @@ export class WebSpeechEngine implements TtsEngine {
   speak(text: string, options: SpeakOptions): Promise<void> {
     return new Promise<void>((resolve) => {
       if (!platform.hasSpeechSynthesis()) return resolve()
+
+      // Cancel any stale utterance before queuing a new one. Some Android
+      // WebViews silently stall speech synthesis without this.
+      window.speechSynthesis.cancel()
+
       const utterance = new SpeechSynthesisUtterance(text)
       utterance.rate = clamp(options.rate, 0.1, 10)
       utterance.pitch = clamp(options.pitch, 0, 2)
       const voice = this.voices.find((v) => v.voiceURI === options.voiceId)
       if (voice) utterance.voice = voice
-      // Resolve on both end and error so the controller loop never stalls.
-      utterance.onend = () => resolve()
-      utterance.onerror = () => resolve()
+
+      let resolved = false
+      const done = () => { if (!resolved) { resolved = true; resolve() } }
+
+      // Safety net: some WebViews never fire onend/onerror. Estimate duration
+      // from character count and resolve after 2× the estimate (min 8 s).
+      const estimatedMs = (text.length / Math.max(0.5, utterance.rate)) * 60
+      const fallback = setTimeout(done, Math.max(8000, estimatedMs * 2))
+
+      utterance.onend = () => { clearTimeout(fallback); done() }
+      utterance.onerror = () => { clearTimeout(fallback); done() }
       window.speechSynthesis.speak(utterance)
     })
   }
