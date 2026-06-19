@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import {
   Moon, Sun, Headphones, Pause, Play, Square, Loader2,
   ChevronsDown, List, Bookmark, Search, Settings2,
-  LayoutGrid, ChevronLeft, Clock,
+  ChevronLeft, Clock,
 } from 'lucide-react'
 import type { TtsStatus } from '@/tts/controller'
 import type { ThemeMode } from '@/theme/tokens'
@@ -11,10 +11,11 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { Select, type SelectOption } from '@/ui/Select'
 import { Toggle } from '@/ui/Toggle'
 import { Slider } from '@/ui/Slider'
+import { VoicePickerDialog } from '@/ui/VoicePickerDialog'
 import { createTtsEngine } from '@/tts/registry'
 import type { TtsVoice } from '@/tts/types'
 
-type FooterMode = 'default' | 'tts' | 'autoscroll' | 'footer-settings'
+type FooterMode = 'default' | 'tts' | 'autoscroll'
 
 export interface ReaderActionBarProps {
   canAutoScroll: boolean
@@ -53,7 +54,7 @@ const SLEEP_OPTIONS: SelectOption[] = [
   { value: '60', label: '1 hour' },
 ]
 
-const ALL_ACTION_META: Array<{ id: string; label: string; icon: React.ReactNode }> = [
+export const ALL_ACTION_META: Array<{ id: string; label: string; icon: React.ReactNode }> = [
   { id: 'theme', label: 'Theme', icon: <Moon size={16} /> },
   { id: 'tts', label: 'Listen', icon: <Headphones size={16} /> },
   { id: 'autoscroll', label: 'Scroll', icon: <ChevronsDown size={16} /> },
@@ -61,7 +62,6 @@ const ALL_ACTION_META: Array<{ id: string; label: string; icon: React.ReactNode 
   { id: 'bookmarks', label: 'Marks', icon: <Bookmark size={16} /> },
   { id: 'search', label: 'Search', icon: <Search size={16} /> },
   { id: 'settings', label: 'Reading', icon: <Settings2 size={16} /> },
-  { id: 'footer-settings', label: 'Footer', icon: <LayoutGrid size={16} /> },
 ]
 
 function formatTime(seconds: number): string {
@@ -89,13 +89,14 @@ export function ReaderActionBar(props: ReaderActionBarProps) {
   const reading = useSettingsStore((s) => s.reading)
   const setReading = useSettingsStore((s) => s.setReading)
 
-  // Open TTS panel automatically when TTS transitions from idle to active
-  // (e.g. triggered from a media session control or the action bar tap).
+  // Auto-open TTS panel when TTS starts playing (e.g. via a media session
+  // headset button). We check for 'playing' specifically so the eager engine
+  // pre-warm (idle → loading → idle) does NOT trigger the panel on mount.
   const prevTtsStatusRef = useRef(props.ttsStatus)
   useEffect(() => {
     const prev = prevTtsStatusRef.current
     prevTtsStatusRef.current = props.ttsStatus
-    if (prev === 'idle' && props.ttsStatus !== 'idle') {
+    if (prev !== 'playing' && props.ttsStatus === 'playing') {
       setMode('tts')
     }
   }, [props.ttsStatus])
@@ -117,16 +118,6 @@ export function ReaderActionBar(props: ReaderActionBarProps) {
         onToggle={props.onToggleAutoScroll}
         speed={reading.autoScrollSpeed}
         onSpeedChange={(autoScrollSpeed) => setReading({ autoScrollSpeed })}
-        onBack={() => setMode('default')}
-      />
-    )
-  }
-
-  if (mode === 'footer-settings') {
-    return (
-      <FooterSettingsPanel
-        actionIds={reading.footerActionIds}
-        onChange={(footerActionIds) => setReading({ footerActionIds })}
         onBack={() => setMode('default')}
       />
     )
@@ -191,12 +182,6 @@ export function ReaderActionBar(props: ReaderActionBarProps) {
       label: 'Reading',
       onClick: props.onOpenSettings,
     },
-    'footer-settings': {
-      id: 'footer-settings',
-      icon: <LayoutGrid size={20} />,
-      label: 'Footer',
-      onClick: () => setMode('footer-settings'),
-    },
   }
 
   const visibleActions = reading.footerActionIds
@@ -243,14 +228,6 @@ function TtsPanel({
   const ttsPrefs = useSettingsStore((s) => s.tts)
   const setTts = useSettingsStore((s) => s.setTts)
   const voices = useVoices(ttsPrefs.engineId)
-
-  const voiceOptions: SelectOption[] = [
-    { value: '', label: 'Default' },
-    ...voices.map((v) => ({
-      value: v.id,
-      label: v.lang ? `${v.name} (${v.lang})` : v.name,
-    })),
-  ]
 
   return (
     <div className="reader-footer-panel">
@@ -302,12 +279,10 @@ function TtsPanel({
 
       <div className="setting-row" style={{ paddingTop: 8 }}>
         <span>Voice</span>
-        <Select
-          ariaLabel="Voice"
+        <VoicePickerDialog
+          voices={voices}
           value={ttsPrefs.voiceId}
           onChange={(voiceId) => setTts({ voiceId })}
-          options={voiceOptions}
-          upward
         />
       </div>
 
@@ -392,45 +367,3 @@ function AutoScrollPanel({
   )
 }
 
-// --- Footer settings panel ---
-
-interface FooterSettingsPanelProps {
-  actionIds: string[]
-  onChange: (ids: string[]) => void
-  onBack: () => void
-}
-
-function FooterSettingsPanel({ actionIds, onChange, onBack }: FooterSettingsPanelProps) {
-  const toggle = (id: string) => {
-    if (actionIds.includes(id)) {
-      onChange(actionIds.filter((a) => a !== id))
-    } else {
-      const order = ALL_ACTION_META.map((a) => a.id)
-      onChange([...actionIds, id].sort((a, b) => order.indexOf(a) - order.indexOf(b)))
-    }
-  }
-
-  return (
-    <div className="reader-footer-panel">
-      <div className="reader-footer-panel-header">
-        <button className="btn btn-icon" onClick={onBack} aria-label="Back">
-          <ChevronLeft size={18} />
-        </button>
-        <span className="reader-footer-panel-title">Footer actions</span>
-      </div>
-      {ALL_ACTION_META.map((action) => (
-        <div key={action.id} className="setting-row">
-          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ color: 'var(--color-text-muted)' }}>{action.icon}</span>
-            {action.label}
-          </span>
-          <Toggle
-            ariaLabel={action.label}
-            checked={actionIds.includes(action.id)}
-            onChange={() => toggle(action.id)}
-          />
-        </div>
-      ))}
-    </div>
-  )
-}

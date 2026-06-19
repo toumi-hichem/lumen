@@ -35,6 +35,7 @@ export class EpubEngine implements BookEngine {
 
   private book: Book | null = null
   private rendition: Rendition | null = null
+  private containerObserver: ResizeObserver | null = null
   private location: BookLocationInfo | null = null
   private tocItems: TocItem[] = []
   private locationCb: ((loc: BookLocationInfo) => void) | null = null
@@ -57,12 +58,20 @@ export class EpubEngine implements BookEngine {
   async renderTo(element: HTMLElement): Promise<void> {
     if (!this.book) throw new Error('open() must be called before renderTo()')
     this.rendition = this.book.renderTo(element, {
-      width: '100%',
-      height: '100%',
+      width: element.clientWidth,
+      height: element.clientHeight,
       flow: this.flow === 'scrolled' ? 'scrolled-doc' : 'paginated',
-      spread: 'auto',
+      spread: 'none',
       allowScriptedContent: false,
     })
+
+    // Re-layout when the container resizes (e.g. footer panel opens/closes).
+    this.containerObserver = new ResizeObserver(() => {
+      if (element.clientWidth > 0 && element.clientHeight > 0) {
+        this.rendition?.resize(element.clientWidth, element.clientHeight)
+      }
+    })
+    this.containerObserver.observe(element)
 
     this.rendition.on('relocated', (loc: Location) => {
       const cfi = loc.start.cfi
@@ -342,6 +351,8 @@ export class EpubEngine implements BookEngine {
   }
 
   destroy(): void {
+    this.containerObserver?.disconnect()
+    this.containerObserver = null
     this.rendition?.destroy()
     this.book?.destroy()
     this.rendition = null
