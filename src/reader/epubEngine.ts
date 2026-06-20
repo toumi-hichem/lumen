@@ -40,6 +40,7 @@ export class EpubEngine implements BookEngine {
   private tocItems: TocItem[] = []
   private locationCb: ((loc: BookLocationInfo) => void) | null = null
   private selectionCb: ((sel: SelectionInfo) => void) | null = null
+  private tapCb: (() => void) | null = null
   private lastTheme: ReaderTheme | null = null
   private spans: ChunkSpan[] = []
   private readalongCfi: string | null = null
@@ -115,6 +116,16 @@ export class EpubEngine implements BookEngine {
     // book iframe so only Lumen's selection menu appears.
     this.rendition.hooks.content.register((contents: Contents) => {
       contents.document.addEventListener('contextmenu', (e) => e.preventDefault())
+      // Tap inside the book toggles the reader chrome in scrolled mode, where
+      // there are no tap-zone overlays. Ignore taps that follow a selection or
+      // land on a link. Clicks inside the iframe never reach the outer document.
+      contents.document.addEventListener('click', (e) => {
+        const sel = contents.window.getSelection()
+        if (sel && !sel.isCollapsed) return
+        const target = e.target as HTMLElement | null
+        if (target?.closest('a')) return
+        this.tapCb?.()
+      })
     })
 
     if (this.lastTheme) this.applyTheme(this.lastTheme)
@@ -231,6 +242,10 @@ export class EpubEngine implements BookEngine {
 
   onSelection(cb: (sel: SelectionInfo) => void): void {
     this.selectionCb = cb
+  }
+
+  onTap(cb: () => void): void {
+    this.tapCb = cb
   }
 
   addHighlight(

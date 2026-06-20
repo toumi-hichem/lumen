@@ -38,6 +38,7 @@ const PRESET_VOICES: TtsVoice[] = [
     gender: 'female' as const,
   })),
 ]
+const PRESET_IDS = new Set(PRESET_VOICES.map((v) => v.id))
 
 /**
  * On-device neural TTS using Supertonic via onnxruntime-web. Heavy assets are
@@ -113,7 +114,7 @@ export class SupertonicEngine implements TtsEngine {
     if (!this.tts || !this.ort) throw new TtsNotAvailableError(this.id, 'not initialized')
     this.cancelled = false
 
-    const voiceId = options.voiceId || 'M1'
+    const voiceId = (options.voiceId && PRESET_IDS.has(options.voiceId)) ? options.voiceId : 'M1'
     const style = await this.getStyle(voiceId)
     if (this.cancelled) return
 

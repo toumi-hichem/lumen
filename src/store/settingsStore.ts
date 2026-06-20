@@ -82,7 +82,7 @@ export const defaultSettings: AppSettings = {
     softWrap: true,
     keepAwake: false,
     autoScrollSpeed: 30,
-    footerActionIds: ['theme', 'tts', 'autoscroll', 'toc', 'bookmarks', 'search', 'settings', 'footer-settings'],
+    footerActionIds: ['theme', 'tts', 'autoscroll', 'toc', 'bookmarks', 'search', 'settings'],
   },
   tts: {
     engineId: 'web-speech',

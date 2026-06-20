@@ -16,6 +16,7 @@ import { Slider } from '@/ui/Slider'
 import { Icon } from '@/ui/Icon'
 import { icons } from '@/ui/icons'
 import { SupertonicDownload } from './settings/SupertonicDownload'
+import { ALL_ACTION_META } from './reader/ReaderActionBar'
 
 export function SettingsScreen() {
   const navigate = useNavigate()
@@ -348,6 +349,34 @@ export function SettingsScreen() {
             />
           </div>
           <SupertonicDownload />
+        </section>
+
+        <section className="settings-section">
+          <h2>Reader footer</h2>
+          <p className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
+            Choose which actions appear in the reader toolbar.
+          </p>
+          {ALL_ACTION_META.map((action) => {
+            const checked = reading.footerActionIds.includes(action.id)
+            const toggle = () => {
+              const order = ALL_ACTION_META.map((a) => a.id)
+              const next = checked
+                ? reading.footerActionIds.filter((id) => id !== action.id)
+                : [...reading.footerActionIds, action.id].sort(
+                    (a, b) => order.indexOf(a) - order.indexOf(b),
+                  )
+              setReading({ footerActionIds: next })
+            }
+            return (
+              <div key={action.id} className="setting-row">
+                <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ color: 'var(--color-text-muted)' }}>{action.icon}</span>
+                  {action.label}
+                </span>
+                <Toggle ariaLabel={action.label} checked={checked} onChange={toggle} />
+              </div>
+            )
+          })}
         </section>
 
         <section className="settings-section">

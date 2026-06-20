@@ -16,16 +16,16 @@ void useSettingsStore
   .hydrate()
   .then(async () => {
     const { tts, setTts } = useSettingsStore.getState()
-    if (tts.engineChosen) return
-    // On Android/iOS prefer the native device TTS so we never hit the
-    // "speechSynthesis not supported" error in restricted WebViews.
-    if (Capacitor.isNativePlatform() && tts.engineId !== 'native-tts') {
-      setTts({ engineId: 'native-tts' })
+    // If the user explicitly chose a working engine, respect it.
+    if (tts.engineChosen && tts.engineId !== 'web-speech') return
+    // Supertonic is the highest-quality option when its assets are present.
+    if (await isSupertonicDownloaded()) {
+      setTts({ engineId: 'supertonic' })
       return
     }
-    // On web, upgrade to Supertonic when its assets are downloaded.
-    if (tts.engineId === 'web-speech' && await isSupertonicDownloaded()) {
-      setTts({ engineId: 'supertonic' })
+    // On Android/iOS use the native TTS — web-speech is unavailable in the WebView.
+    if (Capacitor.isNativePlatform()) {
+      setTts({ engineId: 'native-tts' })
     }
   })
 

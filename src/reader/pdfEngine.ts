@@ -26,6 +26,7 @@ export class PdfEngine implements BookEngine {
   private observer: IntersectionObserver | null = null
   private location: BookLocationInfo | null = null
   private locationCb: ((loc: BookLocationInfo) => void) | null = null
+  private tapCb: (() => void) | null = null
   private rendered = new Set<number>()
   private background = '#ffffff'
 
@@ -67,6 +68,7 @@ export class PdfEngine implements BookEngine {
     element.querySelectorAll('.pdf-page').forEach((el) => this.observer?.observe(el))
 
     element.addEventListener('scroll', this.handleScroll)
+    element.addEventListener('click', this.handleTap)
     this.emitLocation()
   }
 
@@ -108,6 +110,10 @@ export class PdfEngine implements BookEngine {
 
   onLocationChange(cb: (loc: BookLocationInfo) => void): void {
     this.locationCb = cb
+  }
+
+  onTap(cb: () => void): void {
+    this.tapCb = cb
   }
 
   // Selection/highlight are not supported on the canvas-rendered PDF surface.
@@ -168,6 +174,7 @@ export class PdfEngine implements BookEngine {
   destroy(): void {
     this.observer?.disconnect()
     this.container?.removeEventListener('scroll', this.handleScroll)
+    this.container?.removeEventListener('click', this.handleTap)
     if (this.container) this.container.innerHTML = ''
     void (this.pdf as { destroy?: () => Promise<void> } | null)?.destroy?.()
     this.pdf = null
@@ -176,6 +183,11 @@ export class PdfEngine implements BookEngine {
 
   private handleScroll = (): void => {
     this.emitLocation()
+  }
+
+  /** Toggle the reader chrome on a tap (scrolled mode has no tap overlays). */
+  private handleTap = (): void => {
+    this.tapCb?.()
   }
 
   private currentPage(): number {

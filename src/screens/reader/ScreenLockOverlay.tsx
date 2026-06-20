@@ -3,6 +3,7 @@ import { useRef, useState } from 'react'
 
 interface ScreenLockOverlayProps {
   ttsActive: boolean
+  autoScrollActive: boolean
   locked: boolean
   onLock: () => void
   onUnlock: () => void
@@ -19,17 +20,20 @@ const HOLD_MS = 800
 
 export function ScreenLockOverlay({
   ttsActive,
+  autoScrollActive,
   locked,
   onLock,
   onUnlock,
   sleepSecondsRemaining,
 }: ScreenLockOverlayProps) {
   const [showHint, setShowHint] = useState(false)
+  const [pulsing, setPulsing] = useState(false)
   const holdRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const hintRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const pulseRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const holdFiredRef = useRef(false)
 
-  if (!ttsActive && !locked) return null
+  if (!ttsActive && !autoScrollActive && !locked) return null
 
   const handlePointerDown = () => {
     holdFiredRef.current = false
@@ -38,6 +42,10 @@ export function ScreenLockOverlay({
       holdFiredRef.current = true
       setShowHint(false)
       onUnlock()
+      // Confirm the successful hold with a sphere pulsing out of the padlock.
+      setPulsing(true)
+      clearTimeout(pulseRef.current)
+      pulseRef.current = setTimeout(() => setPulsing(false), 700)
     }, HOLD_MS)
   }
 
@@ -77,6 +85,7 @@ export function ScreenLockOverlay({
         onPointerCancel={locked ? handlePointerCancel : undefined}
         aria-label={locked ? 'Hold to unlock' : 'Lock screen'}
       >
+        {pulsing && <span className="screen-lock-pulse" aria-hidden="true" />}
         {locked ? <Lock size={16} /> : <LockOpen size={16} />}
       </button>
 

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useReader } from './reader/useReader'
 import { useTts } from './reader/useTts'
@@ -20,7 +20,11 @@ import { ArrowLeft } from 'lucide-react'
 export function ReaderScreen() {
   const { bookId = '' } = useParams()
   const navigate = useNavigate()
-  const reader = useReader(bookId)
+  const [immersive, setImmersive] = useState(false)
+  // In continuous mode there are no tap-zone overlays, so a tap inside the
+  // content toggles the reader chrome instead.
+  const toggleImmersive = useCallback(() => setImmersive((v) => !v), [])
+  const reader = useReader(bookId, toggleImmersive)
   const { theme } = useTheme()
   const ttsPrefs = useSettingsStore((s) => s.tts)
   const setTts = useSettingsStore((s) => s.setTts)
@@ -29,15 +33,30 @@ export function ReaderScreen() {
   const [panelOpen, setPanelOpen] = useState(false)
   const [panelTab, setPanelTab] = useState<PanelTab>('toc')
   const appbarRef = useRef<HTMLElement>(null)
-  const [immersive, setImmersive] = useState(false)
+  const footerRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(false)
   const [locked, setLocked] = useState(false)
+
+  // Continuous (scrolled) layout: drop the page-turn tap zones so the content
+  // scrolls freely; a tap inside it toggles the chrome via the engine onTap.
+  const continuous = reading.flow === 'scrolled'
 
   useLayoutEffect(() => {
     const el = appbarRef.current
     if (!el) return
     const update = () =>
       document.documentElement.style.setProperty('--appbar-height', `${el.offsetHeight}px`)
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  useLayoutEffect(() => {
+    const el = footerRef.current
+    if (!el) return
+    const update = () =>
+      document.documentElement.style.setProperty('--footer-height', `${el.offsetHeight}px`)
     update()
     const ro = new ResizeObserver(update)
     ro.observe(el)
@@ -68,8 +87,9 @@ export function ReaderScreen() {
     if (!canAutoScroll) setAutoScroll(false)
   }, [canAutoScroll])
 
-  // Auto-unlock when TTS stops.
+  // Auto-unlock when TTS or auto scroll stops.
   const ttsActiveRef = useRef(false)
+  const autoScrollActiveRef = useRef(false)
 
   const maxChars = ttsPrefs.granularity === 'paragraph' ? 1200 : 240
   const advanceRef = useRef<() => void>(() => {})
@@ -97,6 +117,13 @@ export function ReaderScreen() {
     ttsActiveRef.current = isActive
     if (wasActive && !isActive) setLocked(false)
   }, [tts.status])
+
+  useEffect(() => {
+    const wasActive = autoScrollActiveRef.current
+    const isActive = autoScroll && canAutoScroll
+    autoScrollActiveRef.current = isActive
+    if (wasActive && !isActive) setLocked(false)
+  }, [autoScroll, canAutoScroll])
 
   useReadAlong({
     status: tts.status,
@@ -177,8 +204,8 @@ export function ReaderScreen() {
     return (
       <div className="app">
         <header className="appbar">
-          <button className="btn btn-icon" onClick={() => navigate('/')}>
-            <ArrowLeft size={18} /> Library
+          <button className="btn btn-icon" onClick={() => navigate(-1)}>
+            <ArrowLeft size={18} /> Back
           </button>
           <h1>Reader</h1>
         </header>
@@ -197,8 +224,8 @@ export function ReaderScreen() {
       <header className="appbar" ref={appbarRef}>
         <button
           className="btn btn-icon"
-          onClick={() => navigate('/')}
-          aria-label="Back to library"
+          onClick={() => navigate(-1)}
+          aria-label="Back"
         >
           <Icon path={icons.back} size={18} />
         </button>
@@ -209,7 +236,16 @@ export function ReaderScreen() {
         className="reader-viewport"
         onContextMenu={(e) => e.preventDefault()}
       >
-        <div ref={reader.containerRef} style={{ position: 'absolute', inset: 0 }} />
+        <div
+          ref={reader.containerRef}
+          style={{
+            position: 'absolute',
+            top: 'var(--appbar-height, 60px)',
+            bottom: 'var(--footer-height, 100px)',
+            left: 0,
+            right: 0,
+          }}
+        />
 
         {dimOpacity > 0 && (
           <div
@@ -227,33 +263,38 @@ export function ReaderScreen() {
           />
         )}
 
-        <div
-          className="reader-tap-zone left"
-          style={{ width: reading.largeTapZones ? '30%' : '22%' }}
-          onClick={() => turn('prev')}
-          role="button"
-          aria-label="Previous page"
-        />
-        <div
-          className="reader-tap-zone right"
-          style={{ width: reading.largeTapZones ? '30%' : '22%' }}
-          onClick={() => turn('next')}
-          role="button"
-          aria-label="Next page"
-        />
-        <div
-          className="reader-tap-zone center"
-          style={{
-            left: reading.largeTapZones ? '30%' : '22%',
-            right: reading.largeTapZones ? '30%' : '22%',
-          }}
-          onClick={() => setImmersive((v) => !v)}
-          role="button"
-          aria-label="Toggle reader menu"
-        />
+        {!continuous && (
+          <>
+            <div
+              className="reader-tap-zone left"
+              style={{ width: reading.largeTapZones ? '30%' : '22%' }}
+              onClick={() => turn('prev')}
+              role="button"
+              aria-label="Previous page"
+            />
+            <div
+              className="reader-tap-zone right"
+              style={{ width: reading.largeTapZones ? '30%' : '22%' }}
+              onClick={() => turn('next')}
+              role="button"
+              aria-label="Next page"
+            />
+            <div
+              className="reader-tap-zone center"
+              style={{
+                left: reading.largeTapZones ? '30%' : '22%',
+                right: reading.largeTapZones ? '30%' : '22%',
+              }}
+              onClick={() => setImmersive((v) => !v)}
+              role="button"
+              aria-label="Toggle reader menu"
+            />
+          </>
+        )}
 
         <ScreenLockOverlay
           ttsActive={tts.status !== 'idle'}
+          autoScrollActive={autoScroll && canAutoScroll}
           locked={locked}
           onLock={() => setLocked(true)}
           onUnlock={() => setLocked(false)}
@@ -281,7 +322,7 @@ export function ReaderScreen() {
         )}
       </div>
 
-      <div className="reader-footer">
+      <div className="reader-footer" ref={footerRef}>
         <div
           className="reader-progress"
           onClick={seek}

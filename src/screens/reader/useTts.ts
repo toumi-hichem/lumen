@@ -68,7 +68,10 @@ export function useTts(options: UseTtsOptions = {}): ReaderTtsApi {
       },
       onChunk: setChunkIndex,
       onError: setError,
-      onEngineResolved: setActiveEngineId,
+      onEngineResolved: (id) => {
+        setActiveEngineId(id)
+        setError(undefined)
+      },
       onComplete: () => onCompleteRef.current?.(),
     })
   }
@@ -80,6 +83,11 @@ export function useTts(options: UseTtsOptions = {}): ReaderTtsApi {
       voiceId: tts.voiceId,
     })
   }, [tts.rate, tts.pitch, tts.voiceId])
+
+  // Pre-warm the engine from settings so play() doesn't fall back to web-speech.
+  useEffect(() => {
+    void controllerRef.current?.useEngine(tts.engineId)
+  }, [tts.engineId])
 
   // Update OS notification with the current spoken line.
   useEffect(() => {

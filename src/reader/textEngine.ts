@@ -34,6 +34,7 @@ export class TextEngine implements BookEngine {
   private location: BookLocationInfo | null = null
   private locationCb: ((loc: BookLocationInfo) => void) | null = null
   private selectionCb: ((sel: SelectionInfo) => void) | null = null
+  private tapCb: (() => void) | null = null
   private readonly highlights = new Map<string, HighlightColor>()
   private theme: ReaderTheme | null = null
   private spans: ChunkSpan[] = []
@@ -73,6 +74,7 @@ export class TextEngine implements BookEngine {
     this.content = content
 
     element.addEventListener('scroll', this.handleScroll)
+    element.addEventListener('click', this.handleTap)
     content.addEventListener('mouseup', this.handleSelection)
     content.addEventListener('touchend', this.handleSelection)
 
@@ -205,6 +207,10 @@ export class TextEngine implements BookEngine {
     this.selectionCb = cb
   }
 
+  onTap(cb: () => void): void {
+    this.tapCb = cb
+  }
+
   addHighlight(
     cfiRange: string,
     color: HighlightColor,
@@ -288,6 +294,7 @@ export class TextEngine implements BookEngine {
 
   destroy(): void {
     this.container?.removeEventListener('scroll', this.handleScroll)
+    this.container?.removeEventListener('click', this.handleTap)
     this.content?.removeEventListener('mouseup', this.handleSelection)
     this.content?.removeEventListener('touchend', this.handleSelection)
     if (this.container) this.container.innerHTML = ''
@@ -298,6 +305,16 @@ export class TextEngine implements BookEngine {
 
   private handleScroll = (): void => {
     this.emitLocation()
+  }
+
+  /** Toggle the reader chrome on a plain tap (not a selection or link). A
+   *  touch scroll never fires `click`, so this only reacts to genuine taps. */
+  private handleTap = (event: MouseEvent): void => {
+    const selection = window.getSelection()
+    if (selection && !selection.isCollapsed) return
+    const target = event.target as HTMLElement | null
+    if (target?.closest('a')) return
+    this.tapCb?.()
   }
 
   private emitLocation(): void {

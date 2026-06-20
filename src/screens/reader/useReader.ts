@@ -66,9 +66,14 @@ export interface ReaderApi {
   scrollByPixels: (px: number) => void
 }
 
-export function useReader(bookId: string): ReaderApi {
+export function useReader(bookId: string, onTap?: () => void): ReaderApi {
   const { theme, font } = useTheme()
   const reading = useSettingsStore((s) => s.reading)
+
+  // Keep the latest tap handler in a ref so the engine, wired once per mount,
+  // always calls the current callback.
+  const onTapRef = useRef(onTap)
+  onTapRef.current = onTap
 
   const [status, setStatus] = useState<ReaderStatus>('loading')
   const [error, setError] = useState<string>()
@@ -108,8 +113,11 @@ export function useReader(bookId: string): ReaderApi {
         await engine.open(await blob.arrayBuffer())
         if (!active) return engine.destroy()
 
-        // Wait a tick for the viewport element to be present.
-        await waitFor(() => containerEl.current)
+        // Wait for the viewport to be in the DOM and fully laid out.
+        await waitFor(() => {
+          const el = containerEl.current
+          return el && el.clientHeight > 0 ? el : null
+        })
         if (!active || !containerEl.current) return engine.destroy()
 
         await engine.renderTo(containerEl.current)
@@ -120,6 +128,7 @@ export function useReader(bookId: string): ReaderApi {
           scheduleSave(loaded.id, loc)
         })
         engine.onSelection((sel) => setSelection(sel))
+        engine.onTap?.(() => onTapRef.current?.())
 
         const [savedToc, savedProgress, savedBookmarks, savedHighlights] =
           await Promise.all([

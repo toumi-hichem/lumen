@@ -109,6 +109,10 @@ export interface BookEngine {
   getLocation(): BookLocationInfo | null
   onLocationChange(cb: (loc: BookLocationInfo) => void): void
   onSelection(cb: (sel: SelectionInfo) => void): void
+  /** A tap inside the content that is not a text selection or link. Used to
+   *  toggle the reader chrome in continuous mode where there are no tap-zone
+   *  overlays. Optional: engines without a tappable surface omit it. */
+  onTap?(cb: () => void): void
 
   addHighlight(
     cfiRange: string,

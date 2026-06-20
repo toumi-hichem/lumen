@@ -87,6 +87,9 @@ export class MobiEngine implements BookEngine {
   onSelection(cb: (sel: SelectionInfo) => void): void {
     this.inner.onSelection(cb)
   }
+  onTap(cb: () => void): void {
+    this.inner.onTap(cb)
+  }
   addHighlight(cfiRange: string, color: HighlightColor, cssColor: string): void {
     this.inner.addHighlight(cfiRange, color, cssColor)
   }
@@ -110,6 +113,9 @@ export class MobiEngine implements BookEngine {
   }
   chunkAtPoint(x: number, y: number): SpeakableChunk | null {
     return this.inner.chunkAtPoint(x, y)
+  }
+  scrollByPixels(px: number): void {
+    this.inner.scrollByPixels(px)
   }
   destroy(): void {
     this.inner.destroy()
