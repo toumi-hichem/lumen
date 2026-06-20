@@ -691,6 +691,11 @@
 
 /* --- Footer drill-down panels (TTS, autoscroll, footer settings) --- */
 .reader-footer-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 11;
   background: var(--color-surface);
   border-top: 1px solid var(--color-border);
   padding: 16px;
@@ -698,6 +703,12 @@
   max-height: 65vh;
   overflow-y: auto;
   animation: footer-rise 0.24s ease;
+}
+.reader.immersive .reader-footer-panel {
+  opacity: 0;
+  transform: translateY(100%);
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
 }
 
 @media (prefers-reduced-motion: reduce) {

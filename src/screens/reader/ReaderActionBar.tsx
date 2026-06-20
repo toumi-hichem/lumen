@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Moon, Sun, Headphones, Pause, Play, Square, Loader2,
   ChevronsDown, List, Bookmark, Search, Settings2,
@@ -15,23 +15,16 @@ import { VoicePickerDialog } from '@/ui/VoicePickerDialog'
 import { createTtsEngine } from '@/tts/registry'
 import type { TtsVoice } from '@/tts/types'
 
-type FooterMode = 'default' | 'tts' | 'autoscroll'
+export type FooterMode = 'default' | 'tts' | 'autoscroll'
 
 export interface ReaderActionBarProps {
   canAutoScroll: boolean
   autoScroll: boolean
-  onToggleAutoScroll: () => void
   ttsStatus: TtsStatus
-  ttsError?: string
-  ttsSleepMinutes: number | null
-  ttsSleepSecondsRemaining: number | null
-  onTtsPlay: () => void
-  onTtsPause: () => void
-  onTtsResume: () => void
-  onTtsStop: () => void
-  onTtsSetSleep: (minutes: number | null) => void
   themeMode: ThemeMode
   onToggleTheme: () => void
+  onOpenTts: () => void
+  onOpenAutoScroll: () => void
   onOpenPanel: (tab: PanelTab) => void
   onOpenSettings: () => void
 }
@@ -85,43 +78,7 @@ function useVoices(engineId: string): TtsVoice[] {
 }
 
 export function ReaderActionBar(props: ReaderActionBarProps) {
-  const [mode, setMode] = useState<FooterMode>('default')
   const reading = useSettingsStore((s) => s.reading)
-  const setReading = useSettingsStore((s) => s.setReading)
-
-  // Auto-open TTS panel when TTS starts playing (e.g. via a media session
-  // headset button). We check for 'playing' specifically so the eager engine
-  // pre-warm (idle → loading → idle) does NOT trigger the panel on mount.
-  const prevTtsStatusRef = useRef(props.ttsStatus)
-  useEffect(() => {
-    const prev = prevTtsStatusRef.current
-    prevTtsStatusRef.current = props.ttsStatus
-    if (prev !== 'playing' && props.ttsStatus === 'playing') {
-      setMode('tts')
-    }
-  }, [props.ttsStatus])
-
-  if (mode === 'tts') {
-    return (
-      <TtsPanel
-        {...props}
-        onBack={() => setMode('default')}
-      />
-    )
-  }
-
-  if (mode === 'autoscroll') {
-    return (
-      <AutoScrollPanel
-        autoScroll={props.autoScroll}
-        canAutoScroll={props.canAutoScroll}
-        onToggle={props.onToggleAutoScroll}
-        speed={reading.autoScrollSpeed}
-        onSpeedChange={(autoScrollSpeed) => setReading({ autoScrollSpeed })}
-        onBack={() => setMode('default')}
-      />
-    )
-  }
 
   const ttsActive = props.ttsStatus !== 'idle'
 
@@ -145,10 +102,7 @@ export function ReaderActionBar(props: ReaderActionBarProps) {
         : 'Paused'
         : 'Listen',
       active: ttsActive,
-      onClick: () => {
-        setMode('tts')
-        if (props.ttsStatus === 'idle') props.onTtsPlay()
-      },
+      onClick: props.onOpenTts,
     },
     autoscroll: {
       id: 'autoscroll',
@@ -156,7 +110,7 @@ export function ReaderActionBar(props: ReaderActionBarProps) {
       label: 'Scroll',
       active: props.autoScroll,
       disabled: !props.canAutoScroll,
-      onClick: () => setMode('autoscroll'),
+      onClick: props.onOpenAutoScroll,
     },
     toc: {
       id: 'toc',
@@ -209,11 +163,20 @@ export function ReaderActionBar(props: ReaderActionBarProps) {
 
 // --- TTS sub-panel ---
 
-interface TtsPanelProps extends ReaderActionBarProps {
+export interface TtsPanelProps {
+  ttsStatus: TtsStatus
+  ttsError?: string
+  ttsSleepMinutes: number | null
+  ttsSleepSecondsRemaining: number | null
+  onTtsPlay: () => void
+  onTtsPause: () => void
+  onTtsResume: () => void
+  onTtsStop: () => void
+  onTtsSetSleep: (minutes: number | null) => void
   onBack: () => void
 }
 
-function TtsPanel({
+export function TtsPanel({
   ttsStatus,
   ttsError,
   ttsSleepMinutes,
@@ -313,7 +276,7 @@ function TtsPanel({
 
 // --- Auto-scroll sub-panel ---
 
-interface AutoScrollPanelProps {
+export interface AutoScrollPanelProps {
   autoScroll: boolean
   canAutoScroll: boolean
   onToggle: () => void
@@ -322,7 +285,7 @@ interface AutoScrollPanelProps {
   onBack: () => void
 }
 
-function AutoScrollPanel({
+export function AutoScrollPanel({
   autoScroll,
   canAutoScroll,
   onToggle,

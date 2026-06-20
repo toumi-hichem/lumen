@@ -6,7 +6,12 @@ import { useReadAlong } from './reader/useReadAlong'
 import { useKeepAwake } from './reader/useKeepAwake'
 import { useAutoScroll } from './reader/useAutoScroll'
 import { SelectionMenu } from './reader/SelectionMenu'
-import { ReaderActionBar } from './reader/ReaderActionBar'
+import {
+  ReaderActionBar,
+  TtsPanel,
+  AutoScrollPanel,
+  type FooterMode,
+} from './reader/ReaderActionBar'
 import { ScreenLockOverlay } from './reader/ScreenLockOverlay'
 import { ReaderPanel, type PanelTab } from './reader/ReaderPanel'
 import { useSettingsStore } from '@/store/settingsStore'
@@ -36,6 +41,10 @@ export function ReaderScreen() {
   const footerRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(false)
   const [locked, setLocked] = useState(false)
+  // Which footer view is shown. The nav bar always occupies the measured
+  // footer; the tts/autoscroll panels overlay it so opening one does NOT resize
+  // the reader content (which would force the engine to re-render = a flash).
+  const [footerMode, setFooterMode] = useState<FooterMode>('default')
 
   // Continuous (scrolled) layout: drop the page-turn tap zones so the content
   // scrolls freely; a tap inside it toggles the chrome via the engine onTap.
@@ -110,6 +119,16 @@ export function ReaderScreen() {
     const chunks = await reader.getSpeakableChunks(maxChars)
     if (chunks.length) tts.start(chunks)
   }
+
+  // Open the TTS footer panel when narration starts playing (e.g. via a
+  // media-session headset button). Check for 'playing' specifically so the
+  // eager engine pre-warm (idle → loading → idle) doesn't open it on mount.
+  const prevTtsStatusRef = useRef(tts.status)
+  useEffect(() => {
+    const prev = prevTtsStatusRef.current
+    prevTtsStatusRef.current = tts.status
+    if (prev !== 'playing' && tts.status === 'playing') setFooterMode('tts')
+  }, [tts.status])
 
   useEffect(() => {
     const wasActive = ttsActiveRef.current
@@ -200,6 +219,12 @@ export function ReaderScreen() {
     setReading({ themeId: theme.mode === 'dark' ? 'daylight' : 'midnight' })
   }
 
+  const openTts = () => {
+    setFooterMode('tts')
+    if (tts.status === 'idle') void startReadAloud()
+  }
+  const openAutoScroll = () => setFooterMode('autoscroll')
+
   if (reader.status === 'error') {
     return (
       <div className="app">
@@ -240,12 +265,15 @@ export function ReaderScreen() {
           ref={reader.containerRef}
           style={{
             position: 'absolute',
-            top: 'var(--appbar-height, 60px)',
-            bottom: 'var(--footer-height, 100px)',
+            // When the chrome is folded away (immersive), the content fills the
+            // whole screen instead of leaving blank strips where the header and
+            // footer used to be.
+            top: immersive ? 0 : 'var(--appbar-height, 60px)',
+            bottom: immersive ? 0 : 'var(--footer-height, 100px)',
             left: 0,
             right: 0,
-            // Match the page colour so a brief engine re-render (e.g. resize
-            // when a footer panel opens) shows the page, not a white flash.
+            // Match the page colour so any brief engine re-render shows the
+            // page, not a white flash.
             background: theme.tokens.reader.pageBackground,
           }}
         />
@@ -325,6 +353,33 @@ export function ReaderScreen() {
         )}
       </div>
 
+      {/* Footer panels overlay the bar; they sit OUTSIDE the measured footer so
+          opening one never resizes the reader content (which causes a flash). */}
+      {footerMode === 'tts' && (
+        <TtsPanel
+          ttsStatus={tts.status}
+          ttsError={tts.error}
+          ttsSleepMinutes={tts.sleepMinutes}
+          ttsSleepSecondsRemaining={tts.sleepSecondsRemaining}
+          onTtsPlay={() => void startReadAloud()}
+          onTtsPause={tts.pause}
+          onTtsResume={tts.resume}
+          onTtsStop={tts.stop}
+          onTtsSetSleep={tts.setSleepTimer}
+          onBack={() => setFooterMode('default')}
+        />
+      )}
+      {footerMode === 'autoscroll' && (
+        <AutoScrollPanel
+          autoScroll={autoScroll}
+          canAutoScroll={canAutoScroll}
+          onToggle={() => setAutoScroll((v) => !v)}
+          speed={reading.autoScrollSpeed}
+          onSpeedChange={(autoScrollSpeed) => setReading({ autoScrollSpeed })}
+          onBack={() => setFooterMode('default')}
+        />
+      )}
+
       <div className="reader-footer" ref={footerRef}>
         <div
           className="reader-progress"
@@ -340,18 +395,11 @@ export function ReaderScreen() {
         <ReaderActionBar
           canAutoScroll={canAutoScroll}
           autoScroll={autoScroll}
-          onToggleAutoScroll={() => setAutoScroll((v) => !v)}
           ttsStatus={tts.status}
-          ttsError={tts.error}
-          ttsSleepMinutes={tts.sleepMinutes}
-          ttsSleepSecondsRemaining={tts.sleepSecondsRemaining}
-          onTtsPlay={() => void startReadAloud()}
-          onTtsPause={tts.pause}
-          onTtsResume={tts.resume}
-          onTtsStop={tts.stop}
-          onTtsSetSleep={tts.setSleepTimer}
           themeMode={theme.mode}
           onToggleTheme={handleThemeToggle}
+          onOpenTts={openTts}
+          onOpenAutoScroll={openAutoScroll}
           onOpenPanel={openPanel}
           onOpenSettings={() => navigate('/settings')}
         />

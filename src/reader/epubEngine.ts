@@ -39,6 +39,10 @@ export class EpubEngine implements BookEngine {
   private resizeRaf: number | null = null
   private lastWidth = 0
   private lastHeight = 0
+  // Continuous-scroll auto-advance (scrolled-doc renders one section at a time).
+  private scroller: HTMLElement | null = null
+  private advancing = false
+  private lastAdvancedHref = ''
   private location: BookLocationInfo | null = null
   private tocItems: TocItem[] = []
   private locationCb: ((loc: BookLocationInfo) => void) | null = null
@@ -65,12 +69,13 @@ export class EpubEngine implements BookEngine {
     this.rendition = this.book.renderTo(element, {
       width: element.clientWidth,
       height: element.clientHeight,
-      // Continuous mode uses the 'continuous' manager so the whole book scrolls
-      // as one flow. 'scrolled-doc' only scrolls within the current document
-      // and needs next() to advance, which left short sections (covers, title
-      // pages) stuck once the page-turn tap zones were removed.
-      flow: scrolled ? 'scrolled' : 'paginated',
-      manager: scrolled ? 'continuous' : 'default',
+      // Continuous mode uses 'scrolled-doc' with the default manager: it
+      // reliably renders text in our absolutely-positioned container. (The
+      // 'continuous' manager rendered blank here — it locks to the container
+      // height at mount, which our layout settles too late.) 'scrolled-doc'
+      // only scrolls within the current section, so onSectionEnd() auto-advances
+      // across sections and past short ones (covers) that can't scroll.
+      flow: scrolled ? 'scrolled-doc' : 'paginated',
       spread: 'none',
       allowScriptedContent: false,
     })
@@ -110,7 +115,13 @@ export class EpubEngine implements BookEngine {
       // Chunk anchors are section-relative; invalidate on navigation.
       this.spans = []
       this.locationCb?.(this.location)
+      this.advancing = false
     })
+
+    // Continuous scroll: hook each rendered section to advance across sections.
+    if (scrolled) {
+      this.rendition.on('rendered', () => this.bindSectionScroll(element))
+    }
 
     this.rendition.on('selected', (cfiRange: string, contents: Contents) => {
       const sel = contents.window.getSelection()
@@ -389,7 +400,54 @@ export class EpubEngine implements BookEngine {
     return this.spans.find((s) => pos >= s.start && pos < s.end)?.chunk ?? null
   }
 
+  /**
+   * Continuous scroll: 'scrolled-doc' renders one section at a time, so detect
+   * reaching the bottom (or a section too short to scroll) and load the next
+   * section, giving uninterrupted scrolling without page-turn controls.
+   */
+  private bindSectionScroll(element: HTMLElement): void {
+    // The default scrolled manager makes a descendant of `element` the
+    // scroller. Find the one that actually overflows.
+    const candidates = [
+      element,
+      ...Array.from(element.querySelectorAll<HTMLElement>('*')),
+    ]
+    const next = candidates.find((el) => el.scrollHeight > el.clientHeight + 4)
+    const scroller = next ?? element
+    if (scroller !== this.scroller) {
+      this.scroller?.removeEventListener('scroll', this.handleSectionScroll)
+      this.scroller = scroller
+      this.scroller.addEventListener('scroll', this.handleSectionScroll, {
+        passive: true,
+      })
+    }
+    // A section shorter than the viewport can't scroll, so advance past it
+    // (covers, title pages) — once per href to avoid loops.
+    if (!next) this.maybeAdvance()
+  }
+
+  private handleSectionScroll = (): void => {
+    const s = this.scroller
+    if (!s) return
+    if (s.scrollTop + s.clientHeight >= s.scrollHeight - 48) this.maybeAdvance()
+  }
+
+  /** Advance to the next section unless we're at the end or already advancing. */
+  private maybeAdvance(): void {
+    if (this.advancing || !this.rendition) return
+    const href = this.location?.cfi ?? ''
+    if (href && href === this.lastAdvancedHref) return
+    if ((this.location?.progress ?? 0) >= 0.999) return
+    this.advancing = true
+    this.lastAdvancedHref = href
+    void this.rendition.next().catch(() => {
+      this.advancing = false
+    })
+  }
+
   destroy(): void {
+    this.scroller?.removeEventListener('scroll', this.handleSectionScroll)
+    this.scroller = null
     this.containerObserver?.disconnect()
     this.containerObserver = null
     if (this.resizeRaf !== null) {
