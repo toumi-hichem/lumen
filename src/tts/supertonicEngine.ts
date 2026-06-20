@@ -73,20 +73,23 @@ export class SupertonicEngine implements TtsEngine {
   async init(): Promise<void> {
     if (this.ready) return
     try {
-      // Dynamic import keeps onnxruntime-web out of the main bundle.
-      const ort = (await import('onnxruntime-web')) as unknown as OrtModule
+      // Import the WASM-ONLY build. The default 'onnxruntime-web' build is the
+      // JSEP (WebGPU/WebNN) one, which dynamically imports
+      // ort-wasm-simd-threaded.jsep.mjs — a file we don't host, so it 404s in
+      // the WebView ("no available backend"). The '/wasm' build references the
+      // plain ort-wasm-simd-threaded.{mjs,wasm} that the Vite plugin serves.
+      const ort = (await import('onnxruntime-web/wasm')) as unknown as OrtModule
       // Load the wasm runtime from the app itself (served at /ort/ by the
       // onnxruntimeWasm Vite plugin). Supertonic is an on-device, fully-offline
       // voice; fetching its runtime from a CDN broke offline use and failed
-      // inside the native WebView, which is why it kept crashing and falling
-      // back to the system voice.
+      // inside the native WebView.
       const base = import.meta.env.BASE_URL || '/'
       ort.env.wasm.wasmPaths = this.wasmPaths ?? `${base}ort/`
+      // Single-threaded: the WebView isn't cross-origin isolated, so
+      // SharedArrayBuffer (needed for wasm threads/workers) is unavailable.
+      ort.env.wasm.numThreads = 1
       this.ort = ort
 
-      // WASM is the only backend we rely on. WebGPU is faster but flaky inside
-      // the Android/iOS WebView, where it can pass session creation yet fail at
-      // inference; WASM keeps read-aloud reliable everywhere.
       const { tts } = await loadTextToSpeech(ort, this.source, {
         executionProviders: ['wasm'],
         graphOptimizationLevel: 'all',

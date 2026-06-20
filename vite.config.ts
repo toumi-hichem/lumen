@@ -78,7 +78,7 @@ export default defineConfig({
   // onnxruntime-web ships large wasm/mjs assets; keep them as separate chunks
   // and don't try to pre-bundle them so the Supertonic engine can lazy-load.
   optimizeDeps: {
-    exclude: ['onnxruntime-web'],
+    exclude: ['onnxruntime-web', 'onnxruntime-web/wasm'],
   },
   server: {
     host: true,
