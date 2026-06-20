@@ -35,19 +35,16 @@ export function applyReadingVars(
   target.style.setProperty('--reader-margin', `${margin}px`)
 }
 
-const injectedFontUrls = new Set<string>()
+const loadedFontIds = new Set<string>()
 
 /**
- * Lazily inject a webfont stylesheet the first time its font is selected.
- * No-op for system fonts (no url) and for already-injected urls.
+ * Lazily load a webfont the first time its font is selected. The loader
+ * code-splits the bundled, same-origin font CSS so it downloads on demand.
+ * No-op for fonts with no loader (system fonts and the eagerly-bundled UI
+ * fonts) and for already-loaded fonts.
  */
 export function ensureFontLoaded(font: FontDefinition): void {
-  if (!font.url || injectedFontUrls.has(font.url)) return
-  if (typeof document === 'undefined') return
-  const link = document.createElement('link')
-  link.rel = 'stylesheet'
-  link.href = font.url
-  link.dataset.fontId = font.id
-  document.head.appendChild(link)
-  injectedFontUrls.add(font.url)
+  if (!font.load || loadedFontIds.has(font.id)) return
+  loadedFontIds.add(font.id)
+  void font.load().catch(() => loadedFontIds.delete(font.id))
 }

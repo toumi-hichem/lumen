@@ -6,8 +6,14 @@ import { ThemeProvider } from '@/theme/ThemeProvider'
 import { useSettingsStore } from '@/store/settingsStore'
 import { isSupertonicDownloaded } from '@/tts/supertonic/assets'
 import { App } from './App'
+import { registerServiceWorker } from './pwa'
+import './theme/uiFonts'
 import './index.css'
 import './ui/ui.css'
+
+// Register the SW early so it can take control and make the page cross-origin
+// isolated (enables multi-threaded onnxruntime-web for Supertonic TTS).
+registerServiceWorker()
 
 // Hydrate persisted settings, then pick the best default TTS engine if the
 // user hasn't made an explicit choice yet.

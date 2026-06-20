@@ -50,7 +50,17 @@ export default defineConfig({
     react(),
     onnxruntimeWasm(),
     VitePWA({
+      // injectManifest (not generateSW) so our own service worker can add the
+      // COOP/COEP/CORP headers that make the WebView cross-origin isolated,
+      // which is what lets onnxruntime-web run multi-threaded. The SW still
+      // precaches the app shell for offline use. See src/sw.ts.
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       registerType: 'autoUpdate',
+      // Register manually in src/pwa.ts so we can reload once to gain
+      // cross-origin isolation after the SW takes control.
+      injectRegister: null,
       manifest: {
         name: 'Lumen Reader',
         short_name: 'Lumen',
@@ -62,10 +72,10 @@ export default defineConfig({
           { src: 'favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
         ],
       },
-      workbox: {
-        // Precache the app shell only. The large onnxruntime wasm and PDF
-        // worker are fetched on demand rather than bloating the service worker.
-        globPatterns: ['**/*.{js,css,html,svg}'],
+      injectManifest: {
+        // Precache the app shell and bundled fonts. The large onnxruntime wasm
+        // and PDF worker are fetched on demand rather than bloating the SW.
+        globPatterns: ['**/*.{js,css,html,svg,woff2,woff}'],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
       },
     }),

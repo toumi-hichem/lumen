@@ -39,7 +39,14 @@ export const literata: FontDefinition = {
   name: 'Literata',
   category: 'serif',
   stack: 'Literata, Georgia, serif',
-  url: 'https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,600&display=swap',
+  // Bundled and same-origin (see uiFonts.ts rationale); lazily code-split so it
+  // only downloads when a reader selects it.
+  load: () =>
+    Promise.all([
+      import('@fontsource/literata/latin-400.css'),
+      import('@fontsource/literata/latin-400-italic.css'),
+      import('@fontsource/literata/latin-600.css'),
+    ]),
 }
 
 export const openDyslexic: FontDefinition = {
@@ -47,7 +54,7 @@ export const openDyslexic: FontDefinition = {
   name: 'OpenDyslexic',
   category: 'dyslexic',
   stack: '"OpenDyslexic", "Comic Sans MS", sans-serif',
-  url: 'https://cdn.jsdelivr.net/npm/open-dyslexic@1.0.3/open-dyslexic-regular.css',
+  load: () => import('@fontsource/opendyslexic/latin-400.css'),
 }
 
 export const builtInFonts: readonly FontDefinition[] = [

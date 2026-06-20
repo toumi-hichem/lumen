@@ -66,14 +66,15 @@ export interface Theme {
 }
 
 /**
- * A registerable font. `stack` is the CSS font-family value. `url` is an
- * optional webfont stylesheet to inject lazily when the font is selected,
- * which keeps the initial bundle small.
+ * A registerable font. `stack` is the CSS font-family value. `load` is an
+ * optional loader that lazily imports the font's (bundled, same-origin)
+ * webfont CSS the first time the font is selected, which keeps the initial
+ * payload small. Fonts loaded eagerly at startup (see uiFonts.ts) omit it.
  */
 export interface FontDefinition {
   readonly id: string
   readonly name: string
   readonly stack: string
   readonly category: 'serif' | 'sans' | 'mono' | 'dyslexic'
-  readonly url?: string
+  readonly load?: () => Promise<unknown>
 }
