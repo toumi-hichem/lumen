@@ -1,13 +1,54 @@
 /// <reference types="vitest/config" />
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { fileURLToPath, URL } from 'node:url'
+import { createRequire } from 'node:module'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+
+/**
+ * Serve the onnxruntime-web wasm binary from the app itself (at `/ort/`) rather
+ * than a CDN. Supertonic is an on-device, fully-offline voice; fetching its
+ * runtime from jsdelivr breaks offline use and fails inside the native WebView.
+ * With the default `ort.bundle` build only the .wasm is external, so this one
+ * file is all we need to host locally.
+ */
+function onnxruntimeWasm(): Plugin {
+  // The .wasm is the binary; the .mjs is its loader/worker glue. The bundle
+  // build usually inlines the loader, but host it too so a worker fetch can
+  // never hit a missing file.
+  const files = ['ort-wasm-simd-threaded.wasm', 'ort-wasm-simd-threaded.mjs']
+  const dist = dirname(createRequire(import.meta.url).resolve('onnxruntime-web'))
+  const mime = (f: string) =>
+    f.endsWith('.wasm') ? 'application/wasm' : 'text/javascript'
+  return {
+    name: 'onnxruntime-wasm-local',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const file = files.find((f) => req.url?.startsWith(`/ort/${f}`))
+        if (!file) return next()
+        res.setHeader('Content-Type', mime(file))
+        res.end(readFileSync(join(dist, file)))
+      })
+    },
+    generateBundle() {
+      for (const file of files) {
+        this.emitFile({
+          type: 'asset',
+          fileName: `ort/${file}`,
+          source: readFileSync(join(dist, file)),
+        })
+      }
+    },
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     react(),
+    onnxruntimeWasm(),
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {

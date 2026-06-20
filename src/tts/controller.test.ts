@@ -57,7 +57,8 @@ describe('TtsController', () => {
     const controller = new TtsController({ onEngineResolved })
     const resolved = await controller.useEngine('fake-ok')
     expect(resolved).toBe('fake-ok')
-    expect(onEngineResolved).toHaveBeenCalledWith('fake-ok')
+    // No fallback occurred, so the second (info) argument is undefined.
+    expect(onEngineResolved).toHaveBeenCalledWith('fake-ok', undefined)
   })
 
   it('reports playing status while reading', async () => {

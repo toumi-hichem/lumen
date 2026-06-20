@@ -1,4 +1,3 @@
-import { platform } from '@/lib/platform'
 import { getErrorMessage } from '@/lib/result'
 import { PcmAudioPlayer } from './audioPlayer'
 import {
@@ -41,12 +40,6 @@ const PRESET_VOICES: TtsVoice[] = [
 const PRESET_IDS = new Set(PRESET_VOICES.map((v) => v.id))
 
 /**
- * Used only if the runtime can't report its own version. Keep in sync with the
- * `onnxruntime-web` dependency in package.json.
- */
-const ORT_FALLBACK_VERSION = '1.26.0'
-
-/**
  * On-device neural TTS using Supertonic via onnxruntime-web. Heavy assets are
  * loaded lazily on init(); if they are missing or the runtime can't start, init
  * throws and the TTS controller falls back to the Web Speech engine.
@@ -72,8 +65,8 @@ export class SupertonicEngine implements TtsEngine {
     this.source = options.source ?? createAssetSource()
     this.steps = options.steps ?? 8
     this.lang = options.lang ?? 'en'
-    // Left undefined by default so init() can pin the URL to the runtime's
-    // exact version (see below). An explicit override still wins.
+    // Default to the locally-hosted runtime (see below). An explicit override
+    // still wins (used by tests).
     this.wasmPaths = options.wasmPaths
   }
 
@@ -82,37 +75,23 @@ export class SupertonicEngine implements TtsEngine {
     try {
       // Dynamic import keeps onnxruntime-web out of the main bundle.
       const ort = (await import('onnxruntime-web')) as unknown as OrtModule
-      // Pin the wasm binaries to the runtime's OWN version. jsdelivr's
-      // unversioned path serves whatever is latest, which drifts out of sync
-      // with the bundled JS glue and then intermittently fails to instantiate
-      // the .wasm. That mismatch is the main cause of Supertonic "randomly"
-      // crashing and falling back to the system voice.
-      const version = ort.env?.versions?.web ?? ORT_FALLBACK_VERSION
-      ort.env.wasm.wasmPaths =
-        this.wasmPaths ?? `https://cdn.jsdelivr.net/npm/onnxruntime-web@${version}/dist/`
+      // Load the wasm runtime from the app itself (served at /ort/ by the
+      // onnxruntimeWasm Vite plugin). Supertonic is an on-device, fully-offline
+      // voice; fetching its runtime from a CDN broke offline use and failed
+      // inside the native WebView, which is why it kept crashing and falling
+      // back to the system voice.
+      const base = import.meta.env.BASE_URL || '/'
+      ort.env.wasm.wasmPaths = this.wasmPaths ?? `${base}ort/`
       this.ort = ort
 
-      // WebGPU is fast on real browsers but flaky inside the Android/iOS
-      // WebView, where it can pass session creation yet fail at inference.
-      // Prefer the stable WASM backend on native; reserve WebGPU for the web.
-      const useWebGpu = platform.hasWebGPU() && !platform.isNative()
-      const sessionOptions = {
-        executionProviders: [useWebGpu ? 'webgpu' : 'wasm'],
-        graphOptimizationLevel: 'all' as const,
-      }
-
-      try {
-        const { tts } = await loadTextToSpeech(ort, this.source, sessionOptions)
-        this.tts = tts
-      } catch (gpuError) {
-        if (!useWebGpu) throw gpuError
-        // WebGPU init can fail at session create; retry on WASM.
-        const { tts } = await loadTextToSpeech(ort, this.source, {
-          executionProviders: ['wasm'],
-          graphOptimizationLevel: 'all',
-        })
-        this.tts = tts
-      }
+      // WASM is the only backend we rely on. WebGPU is faster but flaky inside
+      // the Android/iOS WebView, where it can pass session creation yet fail at
+      // inference; WASM keeps read-aloud reliable everywhere.
+      const { tts } = await loadTextToSpeech(ort, this.source, {
+        executionProviders: ['wasm'],
+        graphOptimizationLevel: 'all',
+      })
+      this.tts = tts
       this.ready = true
     } catch (error) {
       throw new TtsNotAvailableError(this.id, getErrorMessage(error))

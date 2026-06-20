@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { TtsController, type TtsStatus } from '@/tts/controller'
+import { listTtsEngines } from '@/tts/registry'
 import { setMediaPlaybackState, setupMediaSession, updateMediaSessionLine } from '@/tts/mediaSession'
 import { useSettingsStore } from '@/store/settingsStore'
 import type { SpeakableChunk } from '@/reader/types'
@@ -68,9 +69,18 @@ export function useTts(options: UseTtsOptions = {}): ReaderTtsApi {
       },
       onChunk: setChunkIndex,
       onError: setError,
-      onEngineResolved: (id) => {
+      onEngineResolved: (id, info) => {
         setActiveEngineId(id)
-        setError(undefined)
+        if (info) {
+          // The chosen engine failed; we fell back. Say so instead of silently
+          // swapping to the device voice.
+          const name =
+            listTtsEngines().find((e) => e.id === info.requested)?.name ??
+            info.requested
+          setError(`${name} unavailable: ${info.reason}`)
+        } else {
+          setError(undefined)
+        }
       },
       onComplete: () => onCompleteRef.current?.(),
     })

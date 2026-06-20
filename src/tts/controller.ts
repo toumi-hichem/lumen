@@ -9,8 +9,15 @@ export interface TtsControllerEvents {
   /** Index of the chunk currently being spoken (for highlight sync). */
   onChunk?: (index: number) => void
   onError?: (message: string) => void
-  /** Engine actually in use after any fallback (may differ from requested). */
-  onEngineResolved?: (engineId: string) => void
+  /**
+   * Engine actually in use after any fallback (may differ from requested).
+   * `info` is present only when the requested engine failed and we fell back,
+   * carrying the original failure reason so the UI can explain it.
+   */
+  onEngineResolved?: (
+    engineId: string,
+    info?: { requested: string; reason: string },
+  ) => void
   /** Fired only when all chunks finished naturally (not on stop/pause). */
   onComplete?: () => void
 }
@@ -52,10 +59,13 @@ export class TtsController {
     this.initForId = id
     this.setStatus('loading')
     this.initPromise = this.initEngineWithFallback(id)
-      .then((resolved) => {
+      .then(({ id: resolved, reason }) => {
         this.engineId = resolved
         this.setStatus('idle')
-        this.events.onEngineResolved?.(resolved)
+        this.events.onEngineResolved?.(
+          resolved,
+          resolved !== id && reason ? { requested: id, reason } : undefined,
+        )
         return resolved
       })
       .catch((err: unknown) => {
@@ -136,24 +146,28 @@ export class TtsController {
     this.events.onComplete?.()
   }
 
-  private async initEngineWithFallback(id: string): Promise<string> {
+  private async initEngineWithFallback(
+    id: string,
+  ): Promise<{ id: string; reason?: string }> {
     try {
       const engine = createTtsEngine(id)
       await engine.init()
       this.engine = engine
-      return engine.id
+      return { id: engine.id }
     } catch (primary) {
       const fallbackId = fallbackEngineId()
+      const reason = getErrorMessage(primary)
       if (id === fallbackId) {
-        this.events.onError?.(getErrorMessage(primary))
+        this.events.onError?.(reason)
         throw primary
       }
-      // Preferred engine unavailable — try the platform fallback silently.
+      // Preferred engine unavailable — try the platform fallback, but keep the
+      // reason so the UI can tell the user why their choice didn't load.
       try {
         const fallback = createTtsEngine(fallbackId)
         await fallback.init()
         this.engine = fallback
-        return fallback.id
+        return { id: fallback.id, reason }
       } catch (fallbackError) {
         this.events.onError?.(getErrorMessage(fallbackError))
         throw fallbackError
