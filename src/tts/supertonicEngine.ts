@@ -103,17 +103,58 @@ export class SupertonicEngine implements TtsEngine {
       const cores =
         typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 1 : 1
       ort.env.wasm.numThreads = isolated ? Math.min(cores, 4) : 1
+      // Run inference in a worker (proxy) so onnxruntime never executes on the
+      // main thread. Without this the reader UI freezes during synthesis even
+      // when multi-threaded, because the calling thread blocks on every run().
+      // Proxy keeps the UI responsive regardless of cross-origin isolation.
+      ort.env.wasm.proxy = true
       this.ort = ort
 
-      const { tts } = await loadTextToSpeech(ort, this.source, {
-        executionProviders: ['wasm'],
-        graphOptimizationLevel: 'all',
-      })
-      this.tts = tts
+      // One-time diagnostic so on-device debugging (chrome://inspect) can see
+      // whether isolation/threads/proxy actually engaged.
+      console.info(
+        '[supertonic] init',
+        JSON.stringify({
+          crossOriginIsolated:
+            typeof crossOriginIsolated !== 'undefined' ? crossOriginIsolated : 'n/a',
+          sharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined',
+          isolated,
+          cores,
+          numThreads: ort.env.wasm.numThreads,
+          proxy: ort.env.wasm.proxy,
+        }),
+      )
+
+      this.tts = await this.createEngine(ort)
       await this.warmUp()
       this.ready = true
     } catch (error) {
       throw new TtsNotAvailableError(this.id, getErrorMessage(error))
+    }
+  }
+
+  /**
+   * Build the engine, loading the four ONNX sessions. If the proxy worker can't
+   * start (some WebViews block worker creation), retry once on the main thread
+   * so TTS still works, just without the off-main-thread benefit.
+   */
+  private async createEngine(ort: OrtModule): Promise<TextToSpeech> {
+    const sessionOptions = {
+      executionProviders: ['wasm' as const],
+      graphOptimizationLevel: 'all' as const,
+    }
+    try {
+      const { tts } = await loadTextToSpeech(ort, this.source, sessionOptions)
+      return tts
+    } catch (error) {
+      if (!ort.env.wasm.proxy) throw error
+      console.warn(
+        '[supertonic] proxy worker unavailable, retrying on main thread:',
+        getErrorMessage(error),
+      )
+      ort.env.wasm.proxy = false
+      const { tts } = await loadTextToSpeech(ort, this.source, sessionOptions)
+      return tts
     }
   }
 
