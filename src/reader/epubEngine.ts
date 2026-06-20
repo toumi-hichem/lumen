@@ -36,6 +36,9 @@ export class EpubEngine implements BookEngine {
   private book: Book | null = null
   private rendition: Rendition | null = null
   private containerObserver: ResizeObserver | null = null
+  private resizeRaf: number | null = null
+  private lastWidth = 0
+  private lastHeight = 0
   private location: BookLocationInfo | null = null
   private tocItems: TocItem[] = []
   private locationCb: ((loc: BookLocationInfo) => void) | null = null
@@ -66,11 +69,26 @@ export class EpubEngine implements BookEngine {
       allowScriptedContent: false,
     })
 
+    this.lastWidth = element.clientWidth
+    this.lastHeight = element.clientHeight
+
     // Re-layout when the container resizes (e.g. footer panel opens/closes).
+    // ResizeObserver fires liberally (including same-size notifications and
+    // bursts while CSS height vars settle on a cold open). Re-rendering the
+    // book on each one causes a visible flash and can leave the view in a
+    // broken, unscrollable state, so skip no-op changes and coalesce bursts.
     this.containerObserver = new ResizeObserver(() => {
-      if (element.clientWidth > 0 && element.clientHeight > 0) {
-        this.rendition?.resize(element.clientWidth, element.clientHeight)
-      }
+      const w = element.clientWidth
+      const h = element.clientHeight
+      if (w <= 0 || h <= 0) return
+      if (w === this.lastWidth && h === this.lastHeight) return
+      this.lastWidth = w
+      this.lastHeight = h
+      if (this.resizeRaf !== null) cancelAnimationFrame(this.resizeRaf)
+      this.resizeRaf = requestAnimationFrame(() => {
+        this.resizeRaf = null
+        this.rendition?.resize(w, h)
+      })
     })
     this.containerObserver.observe(element)
 
@@ -368,6 +386,10 @@ export class EpubEngine implements BookEngine {
   destroy(): void {
     this.containerObserver?.disconnect()
     this.containerObserver = null
+    if (this.resizeRaf !== null) {
+      cancelAnimationFrame(this.resizeRaf)
+      this.resizeRaf = null
+    }
     this.rendition?.destroy()
     this.book?.destroy()
     this.rendition = null

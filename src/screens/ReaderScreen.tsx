@@ -244,6 +244,9 @@ export function ReaderScreen() {
             bottom: 'var(--footer-height, 100px)',
             left: 0,
             right: 0,
+            // Match the page colour so a brief engine re-render (e.g. resize
+            // when a footer panel opens) shows the page, not a white flash.
+            background: theme.tokens.reader.pageBackground,
           }}
         />
 
