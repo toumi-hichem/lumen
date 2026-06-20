@@ -22,6 +22,8 @@ export interface ReaderTtsApi {
   chunkIndex: number
   activeEngineId: string
   error?: string
+  /** Persistent notice when the chosen engine failed and we fell back. */
+  fallbackReason?: string
   chunks: SpeakableChunk[]
   /** Minutes set on the sleep timer, or null if off. */
   sleepMinutes: number | null
@@ -41,6 +43,7 @@ export function useTts(options: UseTtsOptions = {}): ReaderTtsApi {
   const [chunkIndex, setChunkIndex] = useState(0)
   const [activeEngineId, setActiveEngineId] = useState(tts.engineId)
   const [error, setError] = useState<string>()
+  const [fallbackReason, setFallbackReason] = useState<string>()
   const [chunks, setChunks] = useState<SpeakableChunk[]>([])
   const [sleepMinutes, setSleepMinutes] = useState<number | null>(null)
   const [sleepSecondsRemaining, setSleepSecondsRemaining] = useState<number | null>(null)
@@ -72,14 +75,17 @@ export function useTts(options: UseTtsOptions = {}): ReaderTtsApi {
       onEngineResolved: (id, info) => {
         setActiveEngineId(id)
         if (info) {
-          // The chosen engine failed; we fell back. Say so instead of silently
-          // swapping to the device voice.
+          // The chosen engine failed; we fell back. Keep this notice visible
+          // (start() must not clear it) so the cause isn't hidden behind a
+          // silent switch to the device voice.
           const name =
             listTtsEngines().find((e) => e.id === info.requested)?.name ??
             info.requested
-          setError(`${name} unavailable: ${info.reason}`)
+          const active =
+            listTtsEngines().find((e) => e.id === id)?.name ?? id
+          setFallbackReason(`${name} unavailable — using ${active}. ${info.reason}`)
         } else {
-          setError(undefined)
+          setFallbackReason(undefined)
         }
       },
       onComplete: () => onCompleteRef.current?.(),
@@ -124,7 +130,6 @@ export function useTts(options: UseTtsOptions = {}): ReaderTtsApi {
       onPrev: () => onPrevRef.current?.(),
     })
     // Re-register only when the displayed metadata changes, not on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [options.bookTitle, options.author, options.coverUrl])
 
   useEffect(() => {
@@ -182,6 +187,7 @@ export function useTts(options: UseTtsOptions = {}): ReaderTtsApi {
     chunkIndex,
     activeEngineId,
     error,
+    fallbackReason,
     chunks,
     sleepMinutes,
     sleepSecondsRemaining,

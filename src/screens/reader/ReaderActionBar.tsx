@@ -166,6 +166,7 @@ export function ReaderActionBar(props: ReaderActionBarProps) {
 export interface TtsPanelProps {
   ttsStatus: TtsStatus
   ttsError?: string
+  ttsFallbackReason?: string
   ttsSleepMinutes: number | null
   ttsSleepSecondsRemaining: number | null
   onTtsPlay: () => void
@@ -179,6 +180,7 @@ export interface TtsPanelProps {
 export function TtsPanel({
   ttsStatus,
   ttsError,
+  ttsFallbackReason,
   ttsSleepMinutes,
   ttsSleepSecondsRemaining,
   onTtsPlay,
@@ -201,6 +203,11 @@ export function TtsPanel({
         <span className="reader-footer-panel-title">Listening</span>
       </div>
 
+      {ttsFallbackReason && (
+        <div className="error-banner" role="alert" style={{ marginBottom: 12 }}>
+          {ttsFallbackReason}
+        </div>
+      )}
       {ttsError && (
         <div className="error-banner" role="alert" style={{ marginBottom: 12 }}>
           {ttsError}

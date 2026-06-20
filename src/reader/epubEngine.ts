@@ -42,7 +42,11 @@ export class EpubEngine implements BookEngine {
   // Continuous-scroll auto-advance (scrolled-doc renders one section at a time).
   private scroller: HTMLElement | null = null
   private advancing = false
-  private lastAdvancedHref = ''
+  private currentHref = ''
+  // Ignore advance triggers until this time; set after navigation/resize so
+  // layout churn (e.g. toggling the chrome) never advances the chapter.
+  private settleUntil = 0
+  private shortCheckTimer: ReturnType<typeof setTimeout> | null = null
   private location: BookLocationInfo | null = null
   private tocItems: TocItem[] = []
   private locationCb: ((loc: BookLocationInfo) => void) | null = null
@@ -98,6 +102,8 @@ export class EpubEngine implements BookEngine {
       if (this.resizeRaf !== null) cancelAnimationFrame(this.resizeRaf)
       this.resizeRaf = requestAnimationFrame(() => {
         this.resizeRaf = null
+        // A resize re-renders the section; don't let the churn auto-advance.
+        this.settleUntil = Date.now() + 600
         this.rendition?.resize(w, h)
       })
     })
@@ -116,9 +122,17 @@ export class EpubEngine implements BookEngine {
       this.spans = []
       this.locationCb?.(this.location)
       this.advancing = false
+      // A genuinely new section (not a resize re-render, which keeps the same
+      // href) may be too short to scroll — check after layout settles so we can
+      // move past covers/title pages. Resize churn keeps href stable → no-op.
+      const href = (loc.start.href as string | undefined) ?? ''
+      if (scrolled && href && href !== this.currentHref) {
+        this.currentHref = href
+        this.scheduleShortSectionCheck()
+      }
     })
 
-    // Continuous scroll: hook each rendered section to advance across sections.
+    // Continuous scroll: keep the scroll listener bound to the live scroller.
     if (scrolled) {
       this.rendition.on('rendered', () => this.bindSectionScroll(element))
     }
@@ -401,9 +415,10 @@ export class EpubEngine implements BookEngine {
   }
 
   /**
-   * Continuous scroll: 'scrolled-doc' renders one section at a time, so detect
-   * reaching the bottom (or a section too short to scroll) and load the next
-   * section, giving uninterrupted scrolling without page-turn controls.
+   * Continuous scroll: 'scrolled-doc' renders one section at a time. Keep a
+   * scroll listener bound to the live scroller so reaching the bottom loads the
+   * next section. Binding only (re)attaches the listener; it never advances, so
+   * resize re-renders (e.g. toggling the chrome) can't skip a chapter.
    */
   private bindSectionScroll(element: HTMLElement): void {
     // The default scrolled manager makes a descendant of `element` the
@@ -412,8 +427,8 @@ export class EpubEngine implements BookEngine {
       element,
       ...Array.from(element.querySelectorAll<HTMLElement>('*')),
     ]
-    const next = candidates.find((el) => el.scrollHeight > el.clientHeight + 4)
-    const scroller = next ?? element
+    const scroller =
+      candidates.find((el) => el.scrollHeight > el.clientHeight + 4) ?? element
     if (scroller !== this.scroller) {
       this.scroller?.removeEventListener('scroll', this.handleSectionScroll)
       this.scroller = scroller
@@ -421,31 +436,41 @@ export class EpubEngine implements BookEngine {
         passive: true,
       })
     }
-    // A section shorter than the viewport can't scroll, so advance past it
-    // (covers, title pages) — once per href to avoid loops.
-    if (!next) this.maybeAdvance()
+  }
+
+  /** After a new section settles, advance past it if it's too short to scroll. */
+  private scheduleShortSectionCheck(): void {
+    if (this.shortCheckTimer) clearTimeout(this.shortCheckTimer)
+    this.settleUntil = Date.now() + 400
+    this.shortCheckTimer = setTimeout(() => {
+      this.shortCheckTimer = null
+      const s = this.scroller
+      if (s && s.scrollHeight <= s.clientHeight + 4) this.maybeAdvance()
+    }, 400)
   }
 
   private handleSectionScroll = (): void => {
     const s = this.scroller
-    if (!s) return
+    if (!s || Date.now() < this.settleUntil) return
     if (s.scrollTop + s.clientHeight >= s.scrollHeight - 48) this.maybeAdvance()
   }
 
-  /** Advance to the next section unless we're at the end or already advancing. */
+  /** Advance to the next section unless at the end or already advancing. */
   private maybeAdvance(): void {
     if (this.advancing || !this.rendition) return
-    const href = this.location?.cfi ?? ''
-    if (href && href === this.lastAdvancedHref) return
     if ((this.location?.progress ?? 0) >= 0.999) return
     this.advancing = true
-    this.lastAdvancedHref = href
+    this.settleUntil = Date.now() + 600
     void this.rendition.next().catch(() => {
       this.advancing = false
     })
   }
 
   destroy(): void {
+    if (this.shortCheckTimer) {
+      clearTimeout(this.shortCheckTimer)
+      this.shortCheckTimer = null
+    }
     this.scroller?.removeEventListener('scroll', this.handleSectionScroll)
     this.scroller = null
     this.containerObserver?.disconnect()

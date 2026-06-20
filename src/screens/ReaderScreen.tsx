@@ -373,6 +373,7 @@ export function ReaderScreen() {
         <TtsPanel
           ttsStatus={tts.status}
           ttsError={tts.error}
+          ttsFallbackReason={tts.fallbackReason}
           ttsSleepMinutes={tts.sleepMinutes}
           ttsSleepSecondsRemaining={tts.sleepSecondsRemaining}
           onTtsPlay={() => void startReadAloud()}
