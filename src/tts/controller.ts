@@ -131,8 +131,15 @@ export class TtsController {
       // A pause/stop flips status; bail out of the loop if so.
       if (this.status !== 'playing') return
       this.events.onChunk?.(this.index)
+      // Start the current chunk first (this synchronously queues its synthesis),
+      // then prefetch the next so neural engines render it during playback and
+      // there's no gap between sentences. Order matters: queue current before
+      // next so the current sentence is never delayed behind a prefetch.
+      const speaking = this.engine.speak(this.chunks[this.index], this.options)
+      const nextChunk = this.chunks[this.index + 1]
+      if (nextChunk) this.engine.prefetch?.(nextChunk, this.options)
       try {
-        await this.engine.speak(this.chunks[this.index], this.options)
+        await speaking
       } catch (error) {
         this.events.onError?.(getErrorMessage(error))
         this.setStatus('idle')

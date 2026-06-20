@@ -56,8 +56,17 @@ export class SupertonicEngine implements TtsEngine {
   private ready = false
   private cancelled = false
 
+  // Pre-synthesized audio so the next sentence is ready before the current ends
+  // (the controller prefetches via prefetch()). ORT sessions can't run two
+  // inferences at once, so all synthesis is serialized through `synthQueue`.
+  private readonly cache = new Map<string, Float32Array>()
+  private readonly pending = new Map<string, Promise<Float32Array>>()
+  private synthQueue: Promise<unknown> = Promise.resolve()
+  /** Measured synth-time / audio-duration from warm-up (lower is faster). */
+  private rtf = 0
+
   private readonly source: AssetSource
-  private readonly steps: number
+  private steps: number
   private readonly lang: string
   private readonly wasmPaths: string | undefined
 
@@ -85,9 +94,15 @@ export class SupertonicEngine implements TtsEngine {
       // inside the native WebView.
       const base = import.meta.env.BASE_URL || '/'
       ort.env.wasm.wasmPaths = this.wasmPaths ?? `${base}ort/`
-      // Single-threaded: the WebView isn't cross-origin isolated, so
-      // SharedArrayBuffer (needed for wasm threads/workers) is unavailable.
-      ort.env.wasm.numThreads = 1
+      // WASM threads need SharedArrayBuffer, which requires cross-origin
+      // isolation. Use multiple threads only when it's actually available
+      // (much faster); otherwise fall back to single-threaded.
+      const isolated =
+        typeof SharedArrayBuffer !== 'undefined' &&
+        (typeof crossOriginIsolated === 'undefined' || crossOriginIsolated)
+      const cores =
+        typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 1 : 1
+      ort.env.wasm.numThreads = isolated ? Math.min(cores, 4) : 1
       this.ort = ort
 
       const { tts } = await loadTextToSpeech(ort, this.source, {
@@ -95,10 +110,47 @@ export class SupertonicEngine implements TtsEngine {
         graphOptimizationLevel: 'all',
       })
       this.tts = tts
+      await this.warmUp()
       this.ready = true
     } catch (error) {
       throw new TtsNotAvailableError(this.id, getErrorMessage(error))
     }
+  }
+
+  /**
+   * Compile the wasm kernels (the first inference is otherwise many times
+   * slower) and measure this device's realtime factor, dropping denoising steps
+   * if it can't synthesize faster than playback. This is the "can the device
+   * handle the model?" check — it adapts quality instead of stuttering.
+   */
+  private async warmUp(): Promise<void> {
+    if (!this.tts) return
+    try {
+      const style = await this.getStyle('M1')
+      // First call compiles kernels — discard its timing.
+      await this.tts.call('Hello.', this.lang, style, this.steps, 1)
+      const t0 = performance.now()
+      const { wav, duration } = await this.tts.call(
+        'Hello there, this is a test.',
+        this.lang,
+        style,
+        this.steps,
+        1,
+      )
+      const ms = performance.now() - t0
+      const audioSec = duration[0] || wav.length / this.tts.sampleRate
+      this.rtf = audioSec > 0 ? ms / 1000 / audioSec : 0
+      // Slower than ~0.85x realtime means even prefetching can't fully hide the
+      // lag, so trade some quality for speed.
+      if (this.rtf >= 0.85 && this.steps > 4) this.steps = 4
+    } catch {
+      // Warm-up is best-effort.
+    }
+  }
+
+  /** Measured realtime factor (synth time / audio length); 0 until warmed. */
+  getRealtimeFactor(): number {
+    return this.rtf
   }
 
   isReady(): boolean {
@@ -110,25 +162,17 @@ export class SupertonicEngine implements TtsEngine {
   }
 
   async speak(text: string, options: SpeakOptions): Promise<void> {
-    if (!this.tts || !this.ort) throw new TtsNotAvailableError(this.id, 'not initialized')
+    if (!this.tts) throw new TtsNotAvailableError(this.id, 'not initialized')
     this.cancelled = false
-
-    const voiceId = (options.voiceId && PRESET_IDS.has(options.voiceId)) ? options.voiceId : 'M1'
-    const style = await this.getStyle(voiceId)
+    const samples = await this.synthesize(text, options)
     if (this.cancelled) return
-
-    const { wav, duration } = await this.tts.call(
-      text,
-      this.lang,
-      style,
-      this.steps,
-      options.rate,
-    )
-    if (this.cancelled) return
-
-    const length = Math.floor(this.tts.sampleRate * duration[0])
-    const samples = Float32Array.from(wav.slice(0, length))
     await this.player.play(samples, this.tts.sampleRate)
+  }
+
+  prefetch(text: string, options: SpeakOptions): void {
+    if (!this.tts) return
+    // Fire-and-forget: warm the cache for the next sentence while this one plays.
+    void this.synthesize(text, options).catch(() => undefined)
   }
 
   stop(): void {
@@ -140,8 +184,61 @@ export class SupertonicEngine implements TtsEngine {
     this.stop()
     this.player.dispose()
     this.styleCache.clear()
+    this.cache.clear()
+    this.pending.clear()
     this.tts = null
     this.ready = false
+  }
+
+  /** Synthesize (or return cached) PCM for a chunk, serialized through the
+   *  queue so ORT never runs two inferences concurrently. */
+  private synthesize(text: string, options: SpeakOptions): Promise<Float32Array> {
+    const voiceId =
+      options.voiceId && PRESET_IDS.has(options.voiceId) ? options.voiceId : 'M1'
+    const key = `${voiceId}|${options.rate}|${this.steps}|${text}`
+    const cached = this.cache.get(key)
+    if (cached) return Promise.resolve(cached)
+    const inflight = this.pending.get(key)
+    if (inflight) return inflight
+
+    const job = this.enqueue(async () => {
+      if (!this.tts) throw new TtsNotAvailableError(this.id, 'not initialized')
+      const style = await this.getStyle(voiceId)
+      const { wav, duration } = await this.tts.call(
+        text,
+        this.lang,
+        style,
+        this.steps,
+        options.rate,
+      )
+      const length = Math.floor(this.tts.sampleRate * duration[0])
+      const samples = Float32Array.from(wav.slice(0, length))
+      this.store(key, samples)
+      return samples
+    })
+    this.pending.set(key, job)
+    void job.finally(() => this.pending.delete(key))
+    return job
+  }
+
+  /** Serialize work so only one ORT inference runs at a time. */
+  private enqueue<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.synthQueue.then(fn, fn)
+    this.synthQueue = run.then(
+      () => undefined,
+      () => undefined,
+    )
+    return run
+  }
+
+  /** Cache a synthesized chunk, capping memory by evicting the oldest. */
+  private store(key: string, samples: Float32Array): void {
+    this.cache.set(key, samples)
+    while (this.cache.size > 6) {
+      const oldest = this.cache.keys().next().value
+      if (oldest === undefined) break
+      this.cache.delete(oldest)
+    }
   }
 
   private async getStyle(voiceId: string): Promise<Style> {

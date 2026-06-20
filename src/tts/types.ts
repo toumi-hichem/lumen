@@ -41,6 +41,14 @@ export interface TtsEngine {
   /** Cancel current and queued speech. */
   stop(): void
 
+  /**
+   * Optional: pre-synthesize a chunk so the next speak() of the same text is
+   * instant. Lets the controller render the next sentence while the current one
+   * plays, hiding synthesis latency. Engines that synthesize and play in one
+   * step (system/native voices) omit it. Best-effort; errors are swallowed.
+   */
+  prefetch?(text: string, options: SpeakOptions): void
+
   /** Release resources (audio context, ORT session). */
   dispose(): void
 }

@@ -19,8 +19,12 @@ class FakeEngine implements TtsEngine {
   async listVoices() {
     return []
   }
+  prefetched: string[] = []
   async speak(text: string, _options: SpeakOptions): Promise<void> {
     this.spoken.push(text)
+  }
+  prefetch(text: string, _options: SpeakOptions): void {
+    this.prefetched.push(text)
   }
   stop(): void {}
   dispose(): void {}
@@ -50,6 +54,15 @@ describe('TtsController', () => {
     expect(lastEngine?.spoken).toEqual(['one', 'two', 'three'])
     expect(onChunk).toHaveBeenCalledTimes(3)
     expect(controller.getStatus()).toBe('idle')
+  })
+
+  it('prefetches each upcoming chunk to pipeline synthesis', async () => {
+    const controller = new TtsController({})
+    await controller.useEngine('fake-ok')
+    await controller.play(['one', 'two', 'three'], opts)
+
+    // Every chunk after the first is prefetched while the prior one plays.
+    expect(lastEngine?.prefetched).toEqual(['two', 'three'])
   })
 
   it('resolves the active engine id after loading', async () => {
