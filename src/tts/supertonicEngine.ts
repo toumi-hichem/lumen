@@ -94,24 +94,24 @@ export class SupertonicEngine implements TtsEngine {
       // inside the native WebView.
       const base = import.meta.env.BASE_URL || '/'
       ort.env.wasm.wasmPaths = this.wasmPaths ?? `${base}ort/`
-      // WASM threads need SharedArrayBuffer, which requires cross-origin
-      // isolation. Use multiple threads only when it's actually available
-      // (much faster); otherwise fall back to single-threaded.
+      // Run onnxruntime inline on the calling thread: single thread, no proxy.
+      // This Android WebView fails to spawn ORT's worker (threaded OR proxy)
+      // with "[wasm] [object Event]", and once the wasm backend fails to init
+      // it stays poisoned, so any worker-based config takes the whole engine
+      // down rather than degrading. Inline is the only config proven to work
+      // here. Off-main-thread execution is pursued separately (a dedicated
+      // worker we control), gated on confirming this WebView can run workers.
       const isolated =
         typeof SharedArrayBuffer !== 'undefined' &&
         (typeof crossOriginIsolated === 'undefined' || crossOriginIsolated)
       const cores =
         typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 1 : 1
-      ort.env.wasm.numThreads = isolated ? Math.min(cores, 4) : 1
-      // Run inference in a worker (proxy) so onnxruntime never executes on the
-      // main thread. Without this the reader UI freezes during synthesis even
-      // when multi-threaded, because the calling thread blocks on every run().
-      // Proxy keeps the UI responsive regardless of cross-origin isolation.
-      ort.env.wasm.proxy = true
+      ort.env.wasm.numThreads = 1
+      ort.env.wasm.proxy = false
       this.ort = ort
 
       // One-time diagnostic so on-device debugging (chrome://inspect) can see
-      // whether isolation/threads/proxy actually engaged.
+      // whether the document actually became cross-origin isolated.
       console.info(
         '[supertonic] init',
         JSON.stringify({
@@ -125,36 +125,15 @@ export class SupertonicEngine implements TtsEngine {
         }),
       )
 
-      this.tts = await this.createEngine(ort)
+      const { tts } = await loadTextToSpeech(ort, this.source, {
+        executionProviders: ['wasm'],
+        graphOptimizationLevel: 'all',
+      })
+      this.tts = tts
       await this.warmUp()
       this.ready = true
     } catch (error) {
       throw new TtsNotAvailableError(this.id, getErrorMessage(error))
-    }
-  }
-
-  /**
-   * Build the engine, loading the four ONNX sessions. If the proxy worker can't
-   * start (some WebViews block worker creation), retry once on the main thread
-   * so TTS still works, just without the off-main-thread benefit.
-   */
-  private async createEngine(ort: OrtModule): Promise<TextToSpeech> {
-    const sessionOptions = {
-      executionProviders: ['wasm' as const],
-      graphOptimizationLevel: 'all' as const,
-    }
-    try {
-      const { tts } = await loadTextToSpeech(ort, this.source, sessionOptions)
-      return tts
-    } catch (error) {
-      if (!ort.env.wasm.proxy) throw error
-      console.warn(
-        '[supertonic] proxy worker unavailable, retrying on main thread:',
-        getErrorMessage(error),
-      )
-      ort.env.wasm.proxy = false
-      const { tts } = await loadTextToSpeech(ort, this.source, sessionOptions)
-      return tts
     }
   }
 
