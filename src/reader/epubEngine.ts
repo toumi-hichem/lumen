@@ -61,10 +61,16 @@ export class EpubEngine implements BookEngine {
 
   async renderTo(element: HTMLElement): Promise<void> {
     if (!this.book) throw new Error('open() must be called before renderTo()')
+    const scrolled = this.flow === 'scrolled'
     this.rendition = this.book.renderTo(element, {
       width: element.clientWidth,
       height: element.clientHeight,
-      flow: this.flow === 'scrolled' ? 'scrolled-doc' : 'paginated',
+      // Continuous mode uses the 'continuous' manager so the whole book scrolls
+      // as one flow. 'scrolled-doc' only scrolls within the current document
+      // and needs next() to advance, which left short sections (covers, title
+      // pages) stuck once the page-turn tap zones were removed.
+      flow: scrolled ? 'scrolled' : 'paginated',
+      manager: scrolled ? 'continuous' : 'default',
       spread: 'none',
       allowScriptedContent: false,
     })
@@ -135,13 +141,13 @@ export class EpubEngine implements BookEngine {
     this.rendition.hooks.content.register((contents: Contents) => {
       contents.document.addEventListener('contextmenu', (e) => e.preventDefault())
       // Tap inside the book toggles the reader chrome in scrolled mode, where
-      // there are no tap-zone overlays. Ignore taps that follow a selection or
-      // land on a link. Clicks inside the iframe never reach the outer document.
-      contents.document.addEventListener('click', (e) => {
+      // there are no tap-zone overlays. Ignore only taps that follow a text
+      // selection; still toggle on links (covers are often link-wrapped images,
+      // and epub.js handles real link navigation separately). Clicks inside the
+      // iframe never reach the outer document.
+      contents.document.addEventListener('click', () => {
         const sel = contents.window.getSelection()
         if (sel && !sel.isCollapsed) return
-        const target = e.target as HTMLElement | null
-        if (target?.closest('a')) return
         this.tapCb?.()
       })
     })
