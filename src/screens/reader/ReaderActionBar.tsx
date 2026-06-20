@@ -199,8 +199,13 @@ export function TtsPanel({
           <ChevronLeft size={18} />
         </button>
         <span className="reader-footer-panel-title">Listening</span>
-        {ttsError && <span className="muted" style={{ fontSize: 12 }}>{ttsError}</span>}
       </div>
+
+      {ttsError && (
+        <div className="error-banner" role="alert" style={{ marginBottom: 12 }}>
+          {ttsError}
+        </div>
+      )}
 
       <div className="reader-footer-tts-controls">
         {ttsStatus === 'idle' && (

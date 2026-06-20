@@ -157,9 +157,23 @@ export function ReaderScreen() {
     if (!id) return
     void bookSettingsRepository.get(id).then((saved) => {
       if (!saved) return
+      const current = useSettingsStore.getState().tts
+      if (!current.engineChosen && saved.ttsEngineId) {
+        // No explicit global engine choice yet — adopt the book's remembered
+        // engine together with its voice.
+        setTts({
+          engineId: saved.ttsEngineId,
+          ...(saved.ttsVoiceId !== undefined ? { voiceId: saved.ttsVoiceId } : {}),
+          ...(saved.ttsRate ? { rate: saved.ttsRate } : {}),
+        })
+        return
+      }
+      // The user picked an engine globally — it wins. A per-book engine must
+      // not silently override it. Restore voice/rate only when the remembered
+      // engine matches the one in use (voice ids are engine-specific).
+      const sameEngine = !saved.ttsEngineId || saved.ttsEngineId === current.engineId
       setTts({
-        ...(saved.ttsEngineId ? { engineId: saved.ttsEngineId } : {}),
-        ...(saved.ttsVoiceId !== undefined ? { voiceId: saved.ttsVoiceId } : {}),
+        ...(sameEngine && saved.ttsVoiceId !== undefined ? { voiceId: saved.ttsVoiceId } : {}),
         ...(saved.ttsRate ? { rate: saved.ttsRate } : {}),
       })
     })
