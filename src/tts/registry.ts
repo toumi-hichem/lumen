@@ -54,6 +54,19 @@ registerTtsEngine({
 
 export const DEFAULT_ENGINE_ID = 'web-speech'
 
+/**
+ * The best always-available engine to fall back to when the preferred one
+ * fails. Inside the native WebView `web-speech` is usually absent, so the
+ * device's own TTS is the correct fallback there; on the web it is web-speech.
+ */
+export function fallbackEngineId(): string {
+  for (const id of ['native-tts', 'web-speech']) {
+    const entry = engines.get(id)
+    if (entry && !entry.requiresAssets && entry.available()) return id
+  }
+  return DEFAULT_ENGINE_ID
+}
+
 export function createTtsEngine(id: string): TtsEngine {
   const entry = engines.get(id) ?? engines.get(DEFAULT_ENGINE_ID)
   if (!entry) throw new Error('No TTS engine registered')

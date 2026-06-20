@@ -1,5 +1,5 @@
 import { getErrorMessage } from '@/lib/result'
-import { createTtsEngine, DEFAULT_ENGINE_ID } from './registry'
+import { createTtsEngine, fallbackEngineId } from './registry'
 import type { SpeakOptions, TtsEngine } from './types'
 
 export type TtsStatus = 'idle' | 'loading' | 'playing' | 'paused'
@@ -74,7 +74,7 @@ export class TtsController {
   ): Promise<void> {
     if (!this.engine?.isReady()) {
       try {
-        await this.useEngine(this.engineId || DEFAULT_ENGINE_ID)
+        await this.useEngine(this.engineId || fallbackEngineId())
       } catch {
         return // onError already reported via events
       }
@@ -143,13 +143,14 @@ export class TtsController {
       this.engine = engine
       return engine.id
     } catch (primary) {
-      if (id === DEFAULT_ENGINE_ID) {
+      const fallbackId = fallbackEngineId()
+      if (id === fallbackId) {
         this.events.onError?.(getErrorMessage(primary))
         throw primary
       }
-      // Preferred engine unavailable — try the default silently.
+      // Preferred engine unavailable — try the platform fallback silently.
       try {
-        const fallback = createTtsEngine(DEFAULT_ENGINE_ID)
+        const fallback = createTtsEngine(fallbackId)
         await fallback.init()
         this.engine = fallback
         return fallback.id
