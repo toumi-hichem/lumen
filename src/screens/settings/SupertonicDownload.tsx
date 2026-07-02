@@ -3,13 +3,12 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { getErrorMessage } from '@/lib/result'
 import { Icon } from '@/ui/Icon'
 import { icons } from '@/ui/icons'
+import { SUPERTONIC_MANIFEST, SUPERTONIC_SIZE_MB } from '@/tts/supertonic/assets'
 import {
-  clearSupertonic,
-  downloadSupertonic,
-  isSupertonicDownloaded,
-  SUPERTONIC_MANIFEST,
-  SUPERTONIC_SIZE_MB,
-} from '@/tts/supertonic/assets'
+  installSupertonic,
+  isSupertonicInstalled,
+  removeSupertonic,
+} from '@/tts/supertonic/install'
 
 type State = 'checking' | 'idle' | 'downloading' | 'installed' | 'error'
 
@@ -27,7 +26,7 @@ export function SupertonicDownload() {
 
   useEffect(() => {
     let active = true
-    void isSupertonicDownloaded().then((has) => {
+    void isSupertonicInstalled().then((has) => {
       if (active) setState(has ? 'installed' : 'idle')
     })
     return () => {
@@ -40,7 +39,7 @@ export function SupertonicDownload() {
     setState('downloading')
     setProgress({ done: 0, total: SUPERTONIC_MANIFEST.length })
     try {
-      await downloadSupertonic((p) => setProgress(p))
+      await installSupertonic((p) => setProgress(p))
       setState('installed')
       // The user opted in: make Supertonic the active, remembered engine.
       setTts({ engineId: 'supertonic', engineChosen: true })
@@ -51,7 +50,7 @@ export function SupertonicDownload() {
   }
 
   const remove = async () => {
-    await clearSupertonic()
+    await removeSupertonic()
     setState('idle')
     if (engineId === 'supertonic') setTts({ engineId: 'web-speech', engineChosen: true })
   }

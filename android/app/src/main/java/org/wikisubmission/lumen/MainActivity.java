@@ -4,10 +4,12 @@ import android.content.res.Configuration;
 import android.graphics.Color;
 import android.os.Bundle;
 import com.getcapacitor.BridgeActivity;
+import org.wikisubmission.lumen.supertonic.SupertonicNativePlugin;
 
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(SupertonicNativePlugin.class);
         super.onCreate(savedInstanceState);
         int nightMode = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
         int bgColor = nightMode == Configuration.UI_MODE_NIGHT_YES

@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core'
 import { registerSW } from 'virtual:pwa-register'
 
 // The service worker does two jobs: precache the app shell for offline use, and
@@ -14,6 +15,9 @@ const RELOAD_GUARD_KEY = 'lumen.coi.reloaded'
 
 function reloadOnceForIsolation(): void {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return
+  // The Android WebView has no SharedArrayBuffer at all (crbug 41436617), so
+  // isolation buys nothing there; native TTS covers it. Skip the reload.
+  if (Capacitor.isNativePlatform()) return
   // Already isolated, or the SW isn't controlling this page yet: nothing to do.
   if (self.crossOriginIsolated) return
   if (!navigator.serviceWorker.controller) return

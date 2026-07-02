@@ -2,7 +2,9 @@ import { Capacitor } from '@capacitor/core'
 import { platform } from '@/lib/platform'
 import { WebSpeechEngine } from './webSpeechEngine'
 import { SupertonicEngine } from './supertonicEngine'
+import { SupertonicNativeEngine } from './supertonicNativeEngine'
 import { NativeTtsEngine } from './nativeTtsEngine'
+import { hasNativeSupertonic } from './supertonic/nativeBridge'
 import type { TtsEngine, TtsEngineDescriptor } from './types'
 
 type EngineFactory = () => TtsEngine
@@ -47,9 +49,14 @@ registerTtsEngine({
   id: 'supertonic',
   name: 'Supertonic (on-device)',
   requiresAssets: true,
-  factory: () => new SupertonicEngine(),
-  // Needs WebAssembly at minimum; WebGPU is used when present.
-  available: () => typeof WebAssembly !== 'undefined',
+  // On Android the native pipeline is strictly better: multithreaded
+  // onnxruntime-android (the WebView has no SharedArrayBuffer, so WASM stays
+  // single-threaded there) and a foreground service that keeps read-aloud
+  // playing with the screen off. On the web, the WASM engine runs in a
+  // dedicated worker.
+  factory: () =>
+    hasNativeSupertonic() ? new SupertonicNativeEngine() : new SupertonicEngine(),
+  available: () => hasNativeSupertonic() || typeof WebAssembly !== 'undefined',
 })
 
 export const DEFAULT_ENGINE_ID = 'web-speech'

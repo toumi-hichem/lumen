@@ -4,7 +4,7 @@ import { HashRouter } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import { ThemeProvider } from '@/theme/ThemeProvider'
 import { useSettingsStore } from '@/store/settingsStore'
-import { isSupertonicDownloaded } from '@/tts/supertonic/assets'
+import { isSupertonicInstalled } from '@/tts/supertonic/install'
 import { App } from './App'
 import { registerServiceWorker } from './pwa'
 import './theme/uiFonts'
@@ -25,7 +25,7 @@ void useSettingsStore
     // If the user explicitly chose a working engine, respect it.
     if (tts.engineChosen && tts.engineId !== 'web-speech') return
     // Supertonic is the highest-quality option when its assets are present.
-    if (await isSupertonicDownloaded()) {
+    if (await isSupertonicInstalled()) {
       setTts({ engineId: 'supertonic' })
       return
     }
