@@ -104,6 +104,8 @@ public class SupertonicTtsService extends Service {
     private final AtomicBoolean cancelled = new AtomicBoolean(false);
     private final Object pauseLock = new Object();
     private volatile boolean paused = false;
+    /** Mono frames written to the current AudioTrack, for end-of-queue drain. */
+    private long framesWritten = 0;
 
     private SupertonicRuntime runtime;
     private AudioTrack audioTrack;
@@ -177,7 +179,7 @@ public class SupertonicTtsService extends Service {
                 fail("Audio focus denied");
                 return;
             }
-            ensureAudioTrack(runtime.sampleRate());
+            createAudioTrack(runtime.sampleRate());
 
             playbackThread = new Thread(() -> drainAndPlay(buffer), "supertonic-playback");
             playbackThread.start();
@@ -204,7 +206,7 @@ public class SupertonicTtsService extends Service {
             while (!cancelled.get()) {
                 Synthesized chunk = buffer.take();
                 if (chunk == END) {
-                    audioTrack.stop();
+                    drainTail();
                     if (l != null) l.onComplete();
                     finish();
                     return;
@@ -233,7 +235,20 @@ public class SupertonicTtsService extends Service {
                 samples, offset, samples.length - offset, AudioTrack.WRITE_BLOCKING);
             if (written < 0) throw new IllegalStateException("AudioTrack write error " + written);
             offset += written;
+            framesWritten += written;
         }
+    }
+
+    /** Let the buffered tail of the last chunk play out before finishing. */
+    private void drainTail() throws InterruptedException {
+        if (audioTrack == null) return;
+        long deadline = System.currentTimeMillis() + 3000;
+        while (!cancelled.get() && System.currentTimeMillis() < deadline) {
+            long head = audioTrack.getPlaybackHeadPosition() & 0xFFFFFFFFL;
+            if (head >= framesWritten) break;
+            Thread.sleep(50);
+        }
+        audioTrack.stop();
     }
 
     void pausePlayback() {
@@ -283,8 +298,10 @@ public class SupertonicTtsService extends Service {
             try {
                 audioTrack.pause();
                 audioTrack.flush();
+                audioTrack.release();
             } catch (Exception ignored) {
             }
+            audioTrack = null;
         }
         if (mediaSession != null) {
             mediaSession.setActive(false);
@@ -327,8 +344,19 @@ public class SupertonicTtsService extends Service {
 
     // --- audio plumbing ---
 
-    private void ensureAudioTrack(int sampleRate) {
-        if (audioTrack != null) return;
+    /**
+     * A fresh track per queue run: a stopped/flushed AudioTrack reused across
+     * runs is a source of corrupted output, and per-run creation is cheap.
+     */
+    private void createAudioTrack(int sampleRate) {
+        if (audioTrack != null) {
+            try {
+                audioTrack.release();
+            } catch (Exception ignored) {
+            }
+            audioTrack = null;
+        }
+        framesWritten = 0;
         int minBuffer = AudioTrack.getMinBufferSize(
             sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_FLOAT);
         audioTrack = new AudioTrack.Builder()

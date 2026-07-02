@@ -21,6 +21,12 @@ const PRESET_VOICES: TtsVoice[] = [
     gender: 'female' as const,
   })),
 ]
+const PRESET_IDS = new Set(PRESET_VOICES.map((v) => v.id))
+
+/** Unset/unknown voice ids (e.g. a fresh install) fall back to the default. */
+function presetVoiceId(voiceId: string | undefined): string {
+  return voiceId && PRESET_IDS.has(voiceId) ? voiceId : 'M1'
+}
 
 /**
  * Supertonic through the native Android pipeline: inference and playback run
@@ -72,7 +78,7 @@ export class SupertonicNativeEngine implements TtsEngine {
   async speak(text: string, options: SpeakOptions): Promise<void> {
     await SupertonicNative.speak({
       chunks: [text],
-      voiceId: options.voiceId,
+      voiceId: presetVoiceId(options.voiceId),
       rate: options.rate,
     })
   }
@@ -86,7 +92,7 @@ export class SupertonicNativeEngine implements TtsEngine {
     this.queueEvents = events
     await SupertonicNative.speak({
       chunks,
-      voiceId: options.voiceId,
+      voiceId: presetVoiceId(options.voiceId),
       rate: options.rate,
       startIndex,
       title: 'Reading aloud',

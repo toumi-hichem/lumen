@@ -134,7 +134,7 @@ public class SupertonicNativePlugin extends Plugin {
     private void startPlayback(PluginCall call, List<String> chunks) {
         SupertonicTtsService.Request request = new SupertonicTtsService.Request(
             chunks,
-            call.getString("voiceId", "M1"),
+            sanitizeVoiceId(call.getString("voiceId")),
             call.getFloat("rate", 1.0f),
             call.getInt("steps", 8),
             call.getInt("startIndex", 0),
@@ -204,6 +204,16 @@ public class SupertonicNativePlugin extends Plugin {
     private void sendServiceAction(String action) {
         Intent intent = new Intent(getContext(), SupertonicTtsService.class).setAction(action);
         getContext().startService(intent);
+    }
+
+    /**
+     * A fresh install has no chosen voice yet, so JS can send an empty or
+     * unknown id; an unchecked one ends up in a style file path
+     * (voice_styles/&lt;id&gt;.json). Fall back to the default voice instead.
+     */
+    private static String sanitizeVoiceId(String voiceId) {
+        if (voiceId == null || !voiceId.matches("[MF][1-5]")) return "M1";
+        return voiceId;
     }
 
     private static String message(Exception e) {

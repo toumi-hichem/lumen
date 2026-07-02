@@ -1,10 +1,7 @@
 package org.wikisubmission.lumen.supertonic;
 
-import android.util.Log;
-
 import java.nio.FloatBuffer;
 import java.nio.LongBuffer;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
@@ -25,8 +22,6 @@ import ai.onnxruntime.OrtSession;
  * the default CPU provider with intra-op threads.
  */
 final class SupertonicRuntime implements AutoCloseable {
-
-    private static final String TAG = "SupertonicRuntime";
 
     /** Cancelled synthesis surfaces as this, so callers can tell it from failures. */
     static final class CancelledException extends Exception {
@@ -80,22 +75,19 @@ final class SupertonicRuntime implements AutoCloseable {
     }
 
     /**
-     * XNNPACK is ONNX Runtime's recommended mobile CPU accelerator for fp32
-     * models now that NNAPI is deprecated; fall back to the default CPU
-     * provider (also multithreaded) when it can't initialize on this device.
+     * Multithreaded default CPU provider. XNNPACK was tried first (ORT's
+     * recommendation for fp32 mobile models) but produced garbled audio from
+     * the second utterance on: the first inference was correct and later ones
+     * with different tensor shapes were noise, consistent with XNNPACK
+     * shape-cache misbehavior on this model. sherpa-onnx ships the plain CPU
+     * provider for all its Android TTS models (including Supertonic) for the
+     * same reason; it is the proven-correct multithreaded path.
      */
     private OrtSession.SessionOptions buildSessionOptions() throws Exception {
         int threads = Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors() - 1));
         OrtSession.SessionOptions options = new OrtSession.SessionOptions();
         options.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT);
-        try {
-            options.addXnnpack(Collections.singletonMap("intra_op_num_threads", String.valueOf(threads)));
-            // XNNPACK runs its own threadpool; keep ORT's for the remaining ops.
-            options.setIntraOpNumThreads(1);
-        } catch (Throwable t) {
-            Log.w(TAG, "XNNPACK unavailable, using default CPU provider", t);
-            options.setIntraOpNumThreads(threads);
-        }
+        options.setIntraOpNumThreads(threads);
         return options;
     }
 
