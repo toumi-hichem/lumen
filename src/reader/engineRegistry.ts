@@ -46,6 +46,14 @@ const EXTENSION_FORMATS: Record<string, BookFormat> = {
   pdf: 'pdf',
 }
 
+/**
+ * File extensions (without dot) that the import pipeline accepts. Every entry
+ * maps to a registered engine, so the picker, importBook and the reader stay
+ * aligned from a single source of truth.
+ */
+export const SUPPORTED_EXTENSIONS: readonly string[] =
+  Object.keys(EXTENSION_FORMATS)
+
 /** Infer a book format from a filename, defaulting to text for unknowns. */
 export function detectFormat(filename: string): BookFormat {
   const ext = filename.split('.').pop()?.toLowerCase() ?? ''

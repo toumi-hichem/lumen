@@ -19,6 +19,21 @@ export function applyThemeVars(
   target.dataset.theme = theme.id
   const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
   if (meta) meta.content = theme.tokens.color.background
+  // Persist a tiny hint the index.html pre-paint script reads before React
+  // mounts, so the first frame already has the right theme (no flash). Uses
+  // localStorage directly because the script runs before any bundle code.
+  try {
+    localStorage.setItem(
+      'lumen.theme.hint',
+      JSON.stringify({
+        id: theme.id,
+        bg: theme.tokens.color.background,
+        scheme: theme.mode,
+      }),
+    )
+  } catch {
+    // localStorage can be unavailable (private mode, storage disabled).
+  }
 }
 
 /** Apply reading typography preferences as CSS variables. */

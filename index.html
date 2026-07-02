@@ -16,23 +16,38 @@
           carbon: '#000000', solarized: '#FDF6E3', nord: '#2E3440',
           contrast: '#FFFFFF', forest: '#121A14', dusk: '#181527', 'e-ink': '#EDEDEA',
         }
+        var root = document.documentElement
+        var meta = document.querySelector('meta[name="theme-color"]')
+        function paint(id, bg, dark) {
+          if (id) root.setAttribute('data-theme', id)
+          root.style.colorScheme = dark ? 'dark' : 'light'
+          if (meta && bg) meta.setAttribute('content', bg)
+        }
+        // 1) Hint written by the app on every theme change (works on web and
+        //    in the native WebView, where settings live outside localStorage).
+        try {
+          var hint = JSON.parse(localStorage.getItem('lumen.theme.hint'))
+          if (hint && hint.bg && hint.scheme) {
+            paint(hint.id, hint.bg, hint.scheme === 'dark')
+            return
+          }
+        } catch (_) {}
+        // 2) Settings persisted by @capacitor/preferences (web localStorage
+        //    uses a CapacitorStorage. key prefix).
         var id = null
         try {
-          var raw = localStorage.getItem('lumen.settings.v1')
+          var raw = localStorage.getItem('CapacitorStorage.lumen.settings.v1')
           if (raw) {
             var s = JSON.parse(raw)
             id = (s && s.reading && s.reading.themeId) || null
           }
         } catch (_) {}
+        // 3) OS preference.
         if (!id) {
           id = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
             ? 'midnight' : 'daylight'
         }
-        var root = document.documentElement
-        root.setAttribute('data-theme', id)
-        root.style.colorScheme = DARK.indexOf(id) !== -1 ? 'dark' : 'light'
-        var meta = document.querySelector('meta[name="theme-color"]')
-        if (meta) meta.setAttribute('content', BG[id] || '#F7F8FA')
+        paint(id, BG[id] || '#F7F8FA', DARK.indexOf(id) !== -1)
       })()
     </script>
     <!-- Brand/UI fonts are bundled and self-hosted (see src/theme/uiFonts.ts):

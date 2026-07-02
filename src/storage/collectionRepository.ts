@@ -20,8 +20,24 @@ export const collectionRepository: Repository<Collection> = {
     return collection
   },
 
+  /** Deletes the collection and strips its id from every book that had it. */
   async delete(id: string): Promise<void> {
     const db = await getDb()
-    await db.delete('collections', id)
+    const tx = db.transaction(['collections', 'books'], 'readwrite')
+    await tx.objectStore('collections').delete(id)
+
+    const books = await tx.objectStore('books').getAll()
+    await Promise.all(
+      books
+        .filter((book) => book.collectionIds?.includes(id))
+        .map((book) =>
+          tx.objectStore('books').put({
+            ...book,
+            collectionIds: (book.collectionIds ?? []).filter((c) => c !== id),
+          }),
+        ),
+    )
+
+    await tx.done
   },
 }

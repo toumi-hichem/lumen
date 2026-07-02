@@ -13,6 +13,12 @@ interface ParsedMeta {
   coverUrl?: string
 }
 
+const QUOTA_ERROR =
+  'Not enough storage to import this book. Remove some books or free up device storage, then try again.'
+
+/** Files above this size trigger a storage-quota pre-check before importing. */
+const LARGE_FILE_BYTES = 32 * 1024 * 1024
+
 /**
  * Import a picked file into the library: validate the format, persist the raw
  * blob, extract metadata, and store a Book record. Works identically on web
@@ -22,8 +28,12 @@ export async function importBook(file: File): Promise<Result<Book>> {
   const format = detectFormat(file.name)
   if (!isFormatSupported(format)) {
     return err(
-      `${format.toUpperCase()} files aren't supported yet. EPUB and text are available today.`,
+      `${format.toUpperCase()} files aren't supported. Supported formats: EPUB, MOBI, AZW/AZW3, PDF and text (TXT, MD).`,
     )
+  }
+
+  if (file.size > LARGE_FILE_BYTES && (await hasInsufficientSpace(file.size))) {
+    return err(QUOTA_ERROR)
   }
 
   try {
@@ -45,7 +55,30 @@ export async function importBook(file: File): Promise<Result<Book>> {
     await bookRepository.save(book)
     return ok(book)
   } catch (error) {
+    if (isQuotaError(error)) return err(QUOTA_ERROR)
     return err(`Failed to import "${file.name}": ${getErrorMessage(error)}`)
+  }
+}
+
+/** True when an error signals the storage quota was hit (browser-specific names). */
+function isQuotaError(error: unknown): boolean {
+  return (
+    error instanceof DOMException &&
+    (error.name === 'QuotaExceededError' ||
+      error.name === 'NS_ERROR_DOM_QUOTA_REACHED')
+  )
+}
+
+/** Best-effort pre-check: does the estimated remaining quota fit the file? */
+async function hasInsufficientSpace(bytes: number): Promise<boolean> {
+  try {
+    const estimate = await navigator.storage?.estimate?.()
+    if (!estimate?.quota) return false
+    const available = estimate.quota - (estimate.usage ?? 0)
+    // Headroom: the blob is stored alongside metadata and an inlined cover.
+    return available < bytes * 1.2
+  } catch {
+    return false
   }
 }
 

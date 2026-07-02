@@ -24,18 +24,22 @@ export const bookRepository: Repository<Book> & {
     return book
   },
 
-  /** Deletes the book, its file blob, and all related bookmarks/highlights. */
+  /**
+   * Deletes the book, its file blob, and all related rows: bookmarks,
+   * highlights, progress, reading sessions and per-book settings.
+   */
   async delete(id: string): Promise<void> {
     const db = await getDb()
     const book = await db.get('books', id)
     if (book) await fileStore.delete(book.fileKey)
 
     const tx = db.transaction(
-      ['books', 'bookmarks', 'highlights', 'progress'],
+      ['books', 'bookmarks', 'highlights', 'progress', 'sessions', 'bookSettings'],
       'readwrite',
     )
     await tx.objectStore('books').delete(id)
     await tx.objectStore('progress').delete(id)
+    await tx.objectStore('bookSettings').delete(id)
 
     const bookmarkKeys = await tx
       .objectStore('bookmarks')
@@ -51,6 +55,14 @@ export const bookRepository: Repository<Book> & {
       .getAllKeys(id)
     await Promise.all(
       highlightKeys.map((key) => tx.objectStore('highlights').delete(key)),
+    )
+
+    const sessionKeys = await tx
+      .objectStore('sessions')
+      .index('by-bookId')
+      .getAllKeys(id)
+    await Promise.all(
+      sessionKeys.map((key) => tx.objectStore('sessions').delete(key)),
     )
 
     await tx.done

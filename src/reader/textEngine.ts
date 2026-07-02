@@ -40,6 +40,7 @@ export class TextEngine implements BookEngine {
   private spans: ChunkSpan[] = []
   private asHtml = false
   private bionic = { enabled: false, strength: 0.5 }
+  private scrollRaf = 0
 
   async open(data: ArrayBuffer): Promise<void> {
     this.text = new TextDecoder('utf-8').decode(data)
@@ -293,6 +294,8 @@ export class TextEngine implements BookEngine {
   }
 
   destroy(): void {
+    if (this.scrollRaf) cancelAnimationFrame(this.scrollRaf)
+    this.scrollRaf = 0
     this.container?.removeEventListener('scroll', this.handleScroll)
     this.container?.removeEventListener('click', this.handleTap)
     this.content?.removeEventListener('mouseup', this.handleSelection)
@@ -303,8 +306,17 @@ export class TextEngine implements BookEngine {
     this.content = null
   }
 
+  /**
+   * Coalesce scroll bursts to one location emit per animation frame. The
+   * layout read happens inside the frame callback, so the trailing emit
+   * always reflects the final scroll position.
+   */
   private handleScroll = (): void => {
-    this.emitLocation()
+    if (this.scrollRaf) return
+    this.scrollRaf = requestAnimationFrame(() => {
+      this.scrollRaf = 0
+      this.emitLocation()
+    })
   }
 
   /** Toggle the reader chrome on a plain tap (not a selection or link). A

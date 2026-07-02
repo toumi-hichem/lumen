@@ -503,6 +503,12 @@
 .reader-tap-zone.center { width: auto; }
 
 /* Immersive mode — slide header up and footer down instead of display:none. */
+/* With the chrome hidden the tap zones would run under the notch and home
+   indicator; keep them inside the safe area. */
+.reader.immersive .reader-tap-zone {
+  top: env(safe-area-inset-top, 0px);
+  bottom: env(safe-area-inset-bottom, 0px);
+}
 .reader.immersive > .appbar {
   opacity: 0;
   transform: translateY(-100%);

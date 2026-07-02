@@ -90,10 +90,12 @@ export async function importBackup(data: ArrayBuffer): Promise<ImportResult> {
   }
   const manifestBytes = unzipped[MANIFEST]
   if (!manifestBytes) throw new Error('Backup is missing its manifest')
-  const manifest = JSON.parse(strFromU8(manifestBytes)) as BackupManifest
+  const manifest = parseManifest(manifestBytes)
 
   const db = await getDb()
-  // Restore file blobs first so books reference valid keys.
+  // Restore file blobs first so books reference valid keys. Blobs are written
+  // outside the row transaction: re-importing them is harmless, while rows
+  // must land all-or-nothing.
   for (const [fileKey, path] of Object.entries(manifest.files)) {
     const bytes = unzipped[path]
     if (bytes) {
@@ -101,18 +103,58 @@ export async function importBackup(data: ArrayBuffer): Promise<ImportResult> {
     }
   }
 
-  const putAll = async <T>(store: Parameters<typeof db.put>[0], rows: T[]) => {
-    for (const row of rows) await db.put(store, row as never)
-  }
-  await putAll('books', manifest.books)
-  await putAll('bookmarks', manifest.bookmarks)
-  await putAll('highlights', manifest.highlights)
-  await putAll('progress', manifest.progress)
-  await putAll('collections', manifest.collections ?? [])
-  await putAll('bookSettings', manifest.bookSettings ?? [])
-  await putAll('sessions', manifest.sessions ?? [])
+  // Single transaction across every row store: a midway failure aborts the
+  // whole restore instead of leaving a half-imported library.
+  const tx = db.transaction(
+    ['books', 'bookmarks', 'highlights', 'progress', 'collections', 'bookSettings', 'sessions'],
+    'readwrite',
+  )
+  await Promise.all([
+    ...manifest.books.map((row) => tx.objectStore('books').put(row)),
+    ...manifest.bookmarks.map((row) => tx.objectStore('bookmarks').put(row)),
+    ...manifest.highlights.map((row) => tx.objectStore('highlights').put(row)),
+    ...manifest.progress.map((row) => tx.objectStore('progress').put(row)),
+    ...(manifest.collections ?? []).map((row) =>
+      tx.objectStore('collections').put(row),
+    ),
+    ...(manifest.bookSettings ?? []).map((row) =>
+      tx.objectStore('bookSettings').put(row),
+    ),
+    ...(manifest.sessions ?? []).map((row) => tx.objectStore('sessions').put(row)),
+  ])
+  await tx.done
 
   return { books: manifest.books.length, highlights: manifest.highlights.length }
+}
+
+/** Parse and validate the manifest, rejecting corrupt or newer backups. */
+function parseManifest(bytes: Uint8Array): BackupManifest {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(strFromU8(bytes))
+  } catch {
+    throw new Error('Backup manifest is corrupted (not valid JSON)')
+  }
+  if (typeof parsed !== 'object' || parsed === null) {
+    throw new Error('Backup manifest is invalid')
+  }
+  const manifest = parsed as Partial<BackupManifest>
+  if (manifest.version !== 1) {
+    throw new Error(
+      `Unsupported backup version ${String(manifest.version)}. This backup may come from a newer version of the app.`,
+    )
+  }
+  if (
+    !Array.isArray(manifest.books) ||
+    !Array.isArray(manifest.bookmarks) ||
+    !Array.isArray(manifest.highlights) ||
+    !Array.isArray(manifest.progress) ||
+    typeof manifest.files !== 'object' ||
+    manifest.files === null
+  ) {
+    throw new Error('Backup manifest is invalid or incomplete')
+  }
+  return manifest as BackupManifest
 }
 
 /** Read a Blob to bytes, falling back to FileReader where arrayBuffer is absent. */
@@ -135,5 +177,7 @@ export function downloadBlob(filename: string, blob: Blob): void {
   link.href = url
   link.download = filename
   link.click()
-  URL.revokeObjectURL(url)
+  // Revoking synchronously can cancel the download in some browsers; give the
+  // save dialog / download manager time to grab the blob first.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }

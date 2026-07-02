@@ -6,9 +6,19 @@ import { Icon } from '@/ui/Icon'
 import { icons } from '@/ui/icons'
 import { Select } from '@/ui/Select'
 import { t } from '@/i18n'
+import { SUPPORTED_EXTENSIONS } from '@/reader/engineRegistry'
 import type { Book, BookStatus } from '@/domain/models'
 
 type SortKey = 'added' | 'recent' | 'title' | 'author'
+
+/** Picker filter derived from the engine registry so it always matches what
+ *  importBook actually accepts. MIME types help pickers that ignore suffixes. */
+const FILE_ACCEPT = [
+  ...SUPPORTED_EXTENSIONS.map((ext) => `.${ext}`),
+  'application/epub+zip',
+  'application/pdf',
+  'text/plain',
+].join(',')
 
 const STATUS_FILTERS: Array<{ key: BookStatus | 'all'; label: string }> = [
   { key: 'all', label: 'All' },
@@ -107,7 +117,7 @@ export function LibraryScreen() {
         <input
           ref={fileInput}
           type="file"
-          accept=".epub,.txt,.md,.markdown,.mobi,.azw3,.pdf,application/epub+zip,application/pdf,text/plain"
+          accept={FILE_ACCEPT}
           multiple
           hidden
           onChange={onPick}

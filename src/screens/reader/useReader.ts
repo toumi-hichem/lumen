@@ -101,6 +101,37 @@ export function useReader(bookId: string, onTap?: () => void): ReaderApi {
     let active = true
     setStatus('loading')
 
+    // Persist the reading time accrued so far and restart the session clock.
+    // Idempotent: a flushed span is never counted again, so this is safe to
+    // call from visibility changes, pagehide AND the unmount cleanup. Spans
+    // under 10s are dropped (accidental opens / quick tab switches).
+    const flushSession = () => {
+      const start = sessionStart.current
+      if (!sessionBookId.current || !start) return
+      const now = Date.now()
+      sessionStart.current = now
+      const elapsed = now - start
+      if (elapsed > 10_000) {
+        void sessionRepository.add({
+          id: createId('sess'),
+          bookId: sessionBookId.current,
+          startedAt: start,
+          endedAt: now,
+          durationMs: elapsed,
+        })
+      }
+    }
+
+    // Flush when the app is backgrounded or the page is being torn down, so a
+    // process kill doesn't lose the session. On return, restart the clock so
+    // time spent hidden is not counted as reading.
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flushSession()
+      else if (sessionStart.current) sessionStart.current = Date.now()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('pagehide', flushSession)
+
     async function boot() {
       try {
         const loaded = await bookRepository.findById(bookId)
@@ -171,17 +202,10 @@ export function useReader(bookId: string, onTap?: () => void): ReaderApi {
     return () => {
       active = false
       clearTimeout(saveTimer.current)
-      // Record the reading session (ignore very short opens).
-      const elapsed = sessionStart.current ? Date.now() - sessionStart.current : 0
-      if (sessionBookId.current && elapsed > 10_000) {
-        void sessionRepository.add({
-          id: createId('sess'),
-          bookId: sessionBookId.current,
-          startedAt: sessionStart.current,
-          endedAt: Date.now(),
-          durationMs: elapsed,
-        })
-      }
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('pagehide', flushSession)
+      // Record whatever accrued since the last flush (ignores short spans).
+      flushSession()
       sessionStart.current = 0
       engineRef.current?.destroy()
       engineRef.current = null
@@ -191,9 +215,26 @@ export function useReader(bookId: string, onTap?: () => void): ReaderApi {
   }, [bookId, reading.flow])
 
   // Re-theme the reader surface when theme / typography preferences change.
+  // Deliberately depends on the individual fields buildReaderTheme reads, not
+  // the whole `reading` object: brightness/warmth render as overlay divs in
+  // ReaderScreen, and re-running applyTheme on every slider tick would repaint
+  // the engine surface (EPUB iframe) for no visual change.
   useEffect(() => {
     engineRef.current?.applyTheme(buildReaderTheme(theme, font, reading))
-  }, [theme, font, reading])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    theme,
+    font,
+    reading.fontScale,
+    reading.lineHeight,
+    reading.margin,
+    reading.justify,
+    reading.letterSpacing,
+    reading.hideImages,
+    reading.softWrap,
+    reading.bionicReading,
+    reading.bionicStrength,
+  ])
 
   const scheduleSave = (id: string, loc: BookLocationInfo) => {
     clearTimeout(saveTimer.current)

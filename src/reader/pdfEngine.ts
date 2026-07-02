@@ -29,6 +29,7 @@ export class PdfEngine implements BookEngine {
   private tapCb: (() => void) | null = null
   private rendered = new Set<number>()
   private background = '#ffffff'
+  private scrollRaf = 0
 
   async open(data: ArrayBuffer): Promise<void> {
     const lib = await import('pdfjs-dist')
@@ -172,6 +173,8 @@ export class PdfEngine implements BookEngine {
   }
 
   destroy(): void {
+    if (this.scrollRaf) cancelAnimationFrame(this.scrollRaf)
+    this.scrollRaf = 0
     this.observer?.disconnect()
     this.container?.removeEventListener('scroll', this.handleScroll)
     this.container?.removeEventListener('click', this.handleTap)
@@ -181,8 +184,17 @@ export class PdfEngine implements BookEngine {
     this.container = null
   }
 
+  /**
+   * Coalesce scroll bursts to one location emit per animation frame. The
+   * layout read happens inside the frame callback, so the trailing emit
+   * always reflects the final scroll position.
+   */
   private handleScroll = (): void => {
-    this.emitLocation()
+    if (this.scrollRaf) return
+    this.scrollRaf = requestAnimationFrame(() => {
+      this.scrollRaf = 0
+      this.emitLocation()
+    })
   }
 
   /** Toggle the reader chrome on a tap (scrolled mode has no tap overlays). */

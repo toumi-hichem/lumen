@@ -112,13 +112,17 @@ export function ReaderScreen() {
     onPrev: () => void reader.prev(),
   })
 
-  advanceRef.current = async () => {
-    if (!ttsPrefs.autoAdvance) return
-    await reader.next()
-    await new Promise((r) => setTimeout(r, 500))
-    const chunks = await reader.getSpeakableChunks(maxChars)
-    if (chunks.length) tts.start(chunks)
-  }
+  // Keep the ref pointing at the latest closure without mutating during
+  // render (render must stay pure); runs after every commit.
+  useEffect(() => {
+    advanceRef.current = async () => {
+      if (!ttsPrefs.autoAdvance) return
+      await reader.next()
+      await new Promise((r) => setTimeout(r, 500))
+      const chunks = await reader.getSpeakableChunks(maxChars)
+      if (chunks.length) tts.start(chunks)
+    }
+  })
 
   // Open the TTS footer panel when narration starts playing (e.g. via a
   // media-session headset button). Check for 'playing' specifically so the
@@ -281,9 +285,13 @@ export function ReaderScreen() {
             position: 'absolute',
             // When the chrome is folded away (immersive), the content fills the
             // whole screen instead of leaving blank strips where the header and
-            // footer used to be.
-            top: immersive ? 0 : 'var(--appbar-height, 60px)',
-            bottom: immersive ? 0 : 'var(--footer-height, 100px)',
+            // footer used to be. Keep it clear of the notch / home indicator.
+            top: immersive
+              ? 'env(safe-area-inset-top, 0px)'
+              : 'var(--appbar-height, 60px)',
+            bottom: immersive
+              ? 'env(safe-area-inset-bottom, 0px)'
+              : 'var(--footer-height, 100px)',
             left: 0,
             right: 0,
             // Match the page colour so any brief engine re-render shows the

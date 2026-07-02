@@ -18,7 +18,15 @@ function makeBook(id: string, addedAt: number): Book {
 describe('bookRepository', () => {
   beforeEach(async () => {
     const db = await getDb()
-    await db.clear('books')
+    await Promise.all([
+      db.clear('books'),
+      db.clear('files'),
+      db.clear('progress'),
+      db.clear('bookmarks'),
+      db.clear('highlights'),
+      db.clear('sessions'),
+      db.clear('bookSettings'),
+    ])
   })
 
   it('saves and retrieves a book by id', async () => {
@@ -38,6 +46,65 @@ describe('bookRepository', () => {
     await bookRepository.save(makeBook('x', 1))
     await bookRepository.delete('x')
     expect(await bookRepository.findById('x')).toBeNull()
+  })
+
+  it('cascades delete to every related store', async () => {
+    const db = await getDb()
+    await bookRepository.save(makeBook('x', 1))
+    await bookRepository.save(makeBook('keep', 2))
+
+    await db.put('files', { key: 'file_x', blob: new Blob(['book']) })
+    await db.put('progress', {
+      bookId: 'x',
+      location: { cfi: 'epubcfi(/6/2)', progress: 0.5 },
+      updatedAt: 1,
+    })
+    await db.put('bookmarks', {
+      id: 'bm1',
+      bookId: 'x',
+      cfi: 'epubcfi(/6/2)',
+      label: 'Chapter 1',
+      createdAt: 1,
+    })
+    await db.put('highlights', {
+      id: 'hl1',
+      bookId: 'x',
+      cfiRange: 'epubcfi(/6/2,/1:0,/1:5)',
+      text: 'hello',
+      color: 'yellow',
+      createdAt: 1,
+    })
+    await db.put('sessions', {
+      id: 'sess1',
+      bookId: 'x',
+      startedAt: 1,
+      endedAt: 20_001,
+      durationMs: 20_000,
+    })
+    await db.put('bookSettings', { bookId: 'x', ttsRate: 1.2 })
+    // Rows for another book must survive the cascade.
+    await db.put('sessions', {
+      id: 'sess2',
+      bookId: 'keep',
+      startedAt: 1,
+      endedAt: 20_001,
+      durationMs: 20_000,
+    })
+    await db.put('bookSettings', { bookId: 'keep', ttsRate: 0.8 })
+
+    await bookRepository.delete('x')
+
+    expect(await db.get('books', 'x')).toBeUndefined()
+    expect(await db.get('files', 'file_x')).toBeUndefined()
+    expect(await db.get('progress', 'x')).toBeUndefined()
+    expect(await db.get('bookmarks', 'bm1')).toBeUndefined()
+    expect(await db.get('highlights', 'hl1')).toBeUndefined()
+    expect(await db.get('sessions', 'sess1')).toBeUndefined()
+    expect(await db.get('bookSettings', 'x')).toBeUndefined()
+
+    expect(await db.get('books', 'keep')).toBeDefined()
+    expect(await db.get('sessions', 'sess2')).toBeDefined()
+    expect(await db.get('bookSettings', 'keep')).toBeDefined()
   })
 
   it('returns null for a missing book', async () => {
