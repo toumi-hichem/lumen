@@ -96,7 +96,9 @@ export default defineConfig({
   // onnxruntime-web ships large wasm/mjs assets; keep them as separate chunks
   // and don't try to pre-bundle them so the Supertonic engine can lazy-load.
   optimizeDeps: {
-    exclude: ['onnxruntime-web', 'onnxruntime-web/wasm'],
+    // foliate-js lazily imports internal modules (vendor/zip.js, paginator);
+    // esbuild prebundling breaks those dynamic paths, so leave it as-is.
+    exclude: ['onnxruntime-web', 'onnxruntime-web/wasm', 'foliate-js'],
   },
   server: {
     host: true,

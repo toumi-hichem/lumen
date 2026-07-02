@@ -1,4 +1,3 @@
-import ePub from 'epubjs'
 import type { Book, BookFormat } from '@/domain/models'
 import { createId } from '@/lib/id'
 import { err, getErrorMessage, ok, type Result } from '@/lib/result'
@@ -88,33 +87,62 @@ async function parseMetadata(
   filename: string,
 ): Promise<ParsedMeta> {
   const fallbackTitle = filename.replace(/\.[^.]+$/, '')
-  if (format !== 'epub') {
+  if (format !== 'epub' && format !== 'mobi' && format !== 'azw3') {
     return { title: fallbackTitle, author: 'Unknown' }
   }
 
-  const book = ePub(buffer)
+  // foliate-js parses metadata and covers for EPUB and MOBI/AZW3 alike.
   try {
-    const metadata = await book.loaded.metadata
-    const coverUrl = await extractCover(book)
-    return {
-      title: metadata.title?.trim() || fallbackTitle,
-      author: metadata.creator?.trim() || 'Unknown',
-      language: metadata.language,
-      coverUrl,
+    const { makeBook } = await import('foliate-js/view.js')
+    const book = await makeBook(new File([buffer], filename))
+    try {
+      const metadata = book.metadata ?? {}
+      const language = Array.isArray(metadata.language)
+        ? metadata.language[0]
+        : metadata.language
+      return {
+        title: languageMapText(metadata.title) || fallbackTitle,
+        author: contributorText(metadata.author) || 'Unknown',
+        language,
+        coverUrl: await extractCover(book),
+      }
+    } finally {
+      book.destroy?.()
     }
-  } finally {
-    book.destroy()
+  } catch {
+    return { title: fallbackTitle, author: 'Unknown' }
   }
 }
 
+/** EPUB metadata strings may be language maps ({ en: '...' }) or plain. */
+function languageMapText(value: unknown): string {
+  if (typeof value === 'string') return value.trim()
+  if (value && typeof value === 'object') {
+    const first = Object.values(value as Record<string, unknown>)[0]
+    if (typeof first === 'string') return first.trim()
+  }
+  return ''
+}
+
+/** Authors may be a string, an object with a name, or an array of either. */
+function contributorText(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value.map(contributorText).filter(Boolean).join(', ')
+  }
+  if (typeof value === 'string') return value.trim()
+  if (value && typeof value === 'object' && 'name' in value) {
+    return languageMapText((value as { name: unknown }).name)
+  }
+  return ''
+}
+
 /** Read the cover image and inline it as a data URL for durable storage. */
-async function extractCover(
-  book: ReturnType<typeof ePub>,
-): Promise<string | undefined> {
+async function extractCover(book: {
+  getCover?: () => Promise<Blob | null>
+}): Promise<string | undefined> {
   try {
-    const url = await book.coverUrl()
-    if (!url) return undefined
-    const blob = await (await fetch(url)).blob()
+    const blob = await book.getCover?.()
+    if (!blob) return undefined
     return await blobToDataUrl(blob)
   } catch {
     return undefined

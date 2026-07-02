@@ -1,7 +1,6 @@
 import type { BookFormat } from '@/domain/models'
-import { EpubEngine } from './epubEngine'
+import { FoliateEngine } from './foliateEngine'
 import { TextEngine } from './textEngine'
-import { MobiEngine } from './mobiEngine'
 import { PdfEngine } from './pdfEngine'
 import { type BookEngine, UnsupportedFormatError } from './types'
 
@@ -13,10 +12,10 @@ type EngineFactory = () => BookEngine
  * UI and TTS pipeline are format-agnostic and need no changes.
  */
 const factories = new Map<BookFormat, EngineFactory>([
-  ['epub', () => new EpubEngine()],
+  ['epub', () => new FoliateEngine('epub')],
   ['text', () => new TextEngine()],
-  ['mobi', () => new MobiEngine('mobi')],
-  ['azw3', () => new MobiEngine('azw3')],
+  ['mobi', () => new FoliateEngine('mobi')],
+  ['azw3', () => new FoliateEngine('azw3')],
   ['pdf', () => new PdfEngine()],
 ])
 
