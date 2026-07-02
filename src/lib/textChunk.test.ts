@@ -28,4 +28,11 @@ describe('chunkText', () => {
   it('normalizes whitespace', () => {
     expect(chunkText('foo\n\n   bar')).toEqual(['foo bar'])
   })
+
+  it('does not split abbreviations or decimals mid-sentence', () => {
+    const chunks = chunkText('Dr. Smith weighed 3.14 kilograms of flour. Then he baked.', 30)
+    expect(chunks[0]).toContain('Dr. Smith')
+    // The abbreviation must not end a chunk on its own.
+    expect(chunks.some((c) => /^Dr\.$/.test(c.trim()))).toBe(false)
+  })
 })

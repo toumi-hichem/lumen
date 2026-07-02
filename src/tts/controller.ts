@@ -37,6 +37,8 @@ export class TtsController {
   private options: SpeakOptions = { rate: 1, pitch: 1 }
   private initPromise: Promise<string> | null = null
   private initForId = ''
+  /** True while an engine with native queue playback owns sequencing. */
+  private queueMode = false
 
   constructor(private readonly events: TtsControllerEvents = {}) {}
 
@@ -93,23 +95,37 @@ export class TtsController {
     this.index = Math.max(0, Math.min(startIndex, chunks.length - 1))
     this.options = options
     if (!chunks.length) return
+    if (this.engine?.playQueue) {
+      await this.runQueue()
+      return
+    }
     await this.run()
   }
 
   pause(): void {
     if (this.status !== 'playing') return
     this.setStatus('paused')
+    if (this.queueMode) {
+      void this.engine?.pauseQueue?.()
+      return
+    }
     this.engine?.stop()
   }
 
   async resume(): Promise<void> {
     if (this.status !== 'paused') return
+    if (this.queueMode) {
+      this.setStatus('playing')
+      await this.engine?.resumeQueue?.()
+      return
+    }
     await this.run()
   }
 
   stop(): void {
     this.engine?.stop()
     this.index = 0
+    this.queueMode = false
     this.setStatus('idle')
   }
 
@@ -124,6 +140,39 @@ export class TtsController {
 
   // --- internals ---
 
+  /**
+   * Hand the whole queue to an engine that owns playback natively (survives
+   * WebView suspension). The controller mirrors progress from engine events.
+   */
+  private async runQueue(): Promise<void> {
+    if (!this.engine?.playQueue) return
+    this.queueMode = true
+    this.setStatus('playing')
+    try {
+      await this.engine.playQueue(this.chunks, this.options, this.index, {
+        onChunk: (index) => {
+          this.index = index
+          this.events.onChunk?.(index)
+        },
+        onComplete: () => {
+          this.index = 0
+          this.queueMode = false
+          this.setStatus('idle')
+          this.events.onComplete?.()
+        },
+        onError: (message) => {
+          this.queueMode = false
+          this.events.onError?.(message)
+          this.setStatus('idle')
+        },
+      })
+    } catch (error) {
+      this.queueMode = false
+      this.events.onError?.(getErrorMessage(error))
+      this.setStatus('idle')
+    }
+  }
+
   private async run(): Promise<void> {
     if (!this.engine) return
     this.setStatus('playing')
@@ -132,12 +181,15 @@ export class TtsController {
       if (this.status !== 'playing') return
       this.events.onChunk?.(this.index)
       // Start the current chunk first (this synchronously queues its synthesis),
-      // then prefetch the next so neural engines render it during playback and
-      // there's no gap between sentences. Order matters: queue current before
-      // next so the current sentence is never delayed behind a prefetch.
+      // then prefetch upcoming ones so neural engines render them during
+      // playback and there's no gap between sentences. Order matters: queue
+      // current before next so the current sentence is never delayed behind a
+      // prefetch. Depth 2 keeps the pipeline full across short sentences.
       const speaking = this.engine.speak(this.chunks[this.index], this.options)
-      const nextChunk = this.chunks[this.index + 1]
-      if (nextChunk) this.engine.prefetch?.(nextChunk, this.options)
+      for (const ahead of [1, 2]) {
+        const upcoming = this.chunks[this.index + ahead]
+        if (upcoming) this.engine.prefetch?.(upcoming, this.options)
+      }
       try {
         await speaking
       } catch (error) {

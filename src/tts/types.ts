@@ -49,8 +49,34 @@ export interface TtsEngine {
    */
   prefetch?(text: string, options: SpeakOptions): void
 
+  /**
+   * Optional: engines that own full-queue playback (a native service that
+   * keeps synthesizing and playing while the WebView is suspended, e.g. with
+   * the screen off). When present the controller hands over the whole chunk
+   * list and mirrors progress from `events` instead of driving chunk by
+   * chunk from JS. Resolves once the queue has been accepted and started;
+   * completion is signalled via `events.onComplete`.
+   */
+  playQueue?(
+    chunks: string[],
+    options: SpeakOptions,
+    startIndex: number,
+    events: TtsQueueEvents,
+  ): Promise<void>
+  /** Pause queue playback (only with playQueue). */
+  pauseQueue?(): Promise<void> | void
+  /** Resume queue playback (only with playQueue). */
+  resumeQueue?(): Promise<void> | void
+
   /** Release resources (audio context, ORT session). */
   dispose(): void
+}
+
+/** Progress callbacks for engines that own full-queue playback natively. */
+export interface TtsQueueEvents {
+  onChunk: (index: number) => void
+  onComplete: () => void
+  onError: (message: string) => void
 }
 
 export interface TtsEngineDescriptor {

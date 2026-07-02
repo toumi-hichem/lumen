@@ -32,6 +32,18 @@ export interface SupertonicConfig {
   ttl: { chunk_compress_factor: number; latent_dim: number }
 }
 
+/** Thrown when a stop request interrupts an in-flight synthesis. */
+export class SynthesisCancelledError extends Error {
+  constructor() {
+    super('Synthesis cancelled')
+    this.name = 'SynthesisCancelledError'
+  }
+}
+
+export function isSynthesisCancelled(error: unknown): boolean {
+  return error instanceof Error && error.name === 'SynthesisCancelledError'
+}
+
 interface ProcessedText {
   textIds: number[][]
   textMask: number[][][]
@@ -119,7 +131,7 @@ export class Style {
 }
 
 interface InferResult {
-  wav: number[]
+  wav: Float32Array
   duration: number[]
 }
 
@@ -138,18 +150,24 @@ export class TextToSpeech {
     this.sampleRate = cfgs.ae.sample_rate
   }
 
-  /** Synthesize one (already-chunked) utterance into mono float32 PCM. */
+  /**
+   * Synthesize one (already-chunked) utterance into mono float32 PCM.
+   * `shouldCancel` is polled between model runs (most usefully between the
+   * denoising steps, which dominate synthesis time) so a stop request
+   * interrupts within one step instead of after the full synthesis.
+   */
   async call(
     text: string,
     lang: string,
     style: Style,
     totalStep: number,
     speed = 1.05,
+    shouldCancel?: () => boolean,
   ): Promise<InferResult> {
     if (style.ttl.dims[0] !== 1) {
       throw new Error('Single-speaker TTS only supports a single style')
     }
-    return this.infer([text], [lang], style, totalStep, speed)
+    return this.infer([text], [lang], style, totalStep, speed, shouldCancel)
   }
 
   private async infer(
@@ -158,21 +176,25 @@ export class TextToSpeech {
     style: Style,
     totalStep: number,
     speed: number,
+    shouldCancel?: () => boolean,
   ): Promise<InferResult> {
     const { Tensor } = this.ort
     const bsz = textList.length
     const { textIds, textMask } = this.textProcessor.call(textList, langList)
+    const maxLen = textIds[0].length
 
-    const textIdsTensor = new Tensor(
-      'int64',
-      BigInt64Array.from(textIds.flat().map((x) => BigInt(x))),
-      [bsz, textIds[0].length],
-    )
-    const textMaskTensor = new Tensor(
-      'float32',
-      Float32Array.from(textMask.flat(2)),
-      [bsz, 1, textMask[0][0].length],
-    )
+    // Everything below works on flat typed arrays: nested number[][][]
+    // round-trips per denoising step were the dominant JS-side cost.
+    const idsFlat = new BigInt64Array(bsz * maxLen)
+    const maskFlat = new Float32Array(bsz * maxLen)
+    for (let b = 0; b < bsz; b++) {
+      for (let j = 0; j < maxLen; j++) {
+        idsFlat[b * maxLen + j] = BigInt(textIds[b][j])
+        maskFlat[b * maxLen + j] = textMask[b][0][j]
+      }
+    }
+    const textIdsTensor = new Tensor('int64', idsFlat, [bsz, maxLen])
+    const textMaskTensor = new Tensor('float32', maskFlat, [bsz, 1, maxLen])
 
     const dpOutputs = await this.dpOrt.run({
       text_ids: textIdsTensor,
@@ -182,6 +204,7 @@ export class TextToSpeech {
     const duration = Array.from(dpOutputs.duration.data as Float32Array).map(
       (d) => d / speed,
     )
+    if (shouldCancel?.()) throw new SynthesisCancelledError()
 
     const textEncOutputs = await this.textEncOrt.run({
       text_ids: textIdsTensor,
@@ -189,6 +212,7 @@ export class TextToSpeech {
       text_mask: textMaskTensor,
     })
     const textEmb = textEncOutputs.text_emb
+    if (shouldCancel?.()) throw new SynthesisCancelledError()
 
     const sampled = this.sampleNoisyLatent(
       duration,
@@ -198,12 +222,12 @@ export class TextToSpeech {
       this.cfgs.ttl.latent_dim,
     )
     let xt = sampled.xt
-    const latentMask = sampled.latentMask
+    const { latentDimVal, latentLen } = sampled
 
     const latentMaskTensor = new Tensor(
       'float32',
-      Float32Array.from(latentMask.flat(2)),
-      [bsz, 1, latentMask[0][0].length],
+      sampled.latentMask,
+      [bsz, 1, latentLen],
     )
     const totalStepTensor = new Tensor(
       'float32',
@@ -212,16 +236,13 @@ export class TextToSpeech {
     )
 
     for (let step = 0; step < totalStep; step++) {
+      if (shouldCancel?.()) throw new SynthesisCancelledError()
       const currentStepTensor = new Tensor(
         'float32',
         new Float32Array(bsz).fill(step),
         [bsz],
       )
-      const xtTensor = new Tensor(
-        'float32',
-        Float32Array.from(xt.flat(2)),
-        [bsz, xt[0].length, xt[0][0].length],
-      )
+      const xtTensor = new Tensor('float32', xt, [bsz, latentDimVal, latentLen])
 
       const out = await this.vectorEstOrt.run({
         noisy_latent: xtTensor,
@@ -233,19 +254,14 @@ export class TextToSpeech {
         total_step: totalStepTensor,
       })
 
-      const denoised = Array.from(out.denoised_latent.data as Float32Array)
-      const latentDim = xt[0].length
-      const latentLen = xt[0][0].length
-      xt = reshape3d(denoised, bsz, latentDim, latentLen)
+      // The output layout already matches the next input: reuse it directly.
+      xt = out.denoised_latent.data as Float32Array
     }
 
-    const finalXtTensor = new Tensor(
-      'float32',
-      Float32Array.from(xt.flat(2)),
-      [bsz, xt[0].length, xt[0][0].length],
-    )
+    if (shouldCancel?.()) throw new SynthesisCancelledError()
+    const finalXtTensor = new Tensor('float32', xt, [bsz, latentDimVal, latentLen])
     const vocoderOutputs = await this.vocoderOrt.run({ latent: finalXtTensor })
-    const wav = Array.from(vocoderOutputs.wav_tts.data as Float32Array)
+    const wav = vocoderOutputs.wav_tts.data as Float32Array
 
     return { wav, duration }
   }
@@ -256,7 +272,12 @@ export class TextToSpeech {
     baseChunkSize: number,
     chunkCompress: number,
     latentDim: number,
-  ): { xt: number[][][]; latentMask: number[][][] } {
+  ): {
+    xt: Float32Array
+    latentMask: Float32Array
+    latentDimVal: number
+    latentLen: number
+  } {
     const bsz = duration.length
     const maxDur = Math.max(...duration)
     const wavLenMax = Math.floor(maxDur * sampleRate)
@@ -266,60 +287,32 @@ export class TextToSpeech {
     const latentLen = Math.floor((wavLenMax + chunkSize - 1) / chunkSize)
     const latentDimVal = latentDim * chunkCompress
 
-    const xt: number[][][] = []
-    for (let b = 0; b < bsz; b++) {
-      const batch: number[][] = []
-      for (let d = 0; d < latentDimVal; d++) {
-        const row: number[] = []
-        for (let t = 0; t < latentLen; t++) {
-          // Box-Muller transform for standard-normal noise.
-          const u1 = Math.max(0.0001, Math.random())
-          const u2 = Math.random()
-          row.push(Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2))
-        }
-        batch.push(row)
-      }
-      xt.push(batch)
-    }
-
+    // latentMask dims: [bsz, 1, latentLen]
     const latentLengths = wavLengths.map((len) =>
       Math.floor((len + chunkSize - 1) / chunkSize),
     )
-    const latentMask = this.lengthToMask(latentLengths, latentLen)
+    const latentMask = new Float32Array(bsz * latentLen)
+    for (let b = 0; b < bsz; b++) {
+      const limit = Math.min(latentLengths[b], latentLen)
+      for (let t = 0; t < limit; t++) latentMask[b * latentLen + t] = 1
+    }
 
+    // xt dims: [bsz, latentDimVal, latentLen], standard-normal noise masked to
+    // each item's actual length (Box-Muller transform).
+    const xt = new Float32Array(bsz * latentDimVal * latentLen)
     for (let b = 0; b < bsz; b++) {
       for (let d = 0; d < latentDimVal; d++) {
-        for (let t = 0; t < latentLen; t++) xt[b][d][t] *= latentMask[b][0][t]
+        const rowBase = (b * latentDimVal + d) * latentLen
+        for (let t = 0; t < latentLen; t++) {
+          const mask = latentMask[b * latentLen + t]
+          if (mask === 0) continue
+          const u1 = Math.max(0.0001, Math.random())
+          const u2 = Math.random()
+          xt[rowBase + t] =
+            Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2) * mask
+        }
       }
     }
-    return { xt, latentMask }
+    return { xt, latentMask, latentDimVal, latentLen }
   }
-
-  private lengthToMask(lengths: number[], maxLen: number): number[][][] {
-    return lengths.map((len) => {
-      const row = new Array<number>(maxLen).fill(0)
-      for (let j = 0; j < Math.min(len, maxLen); j++) row[j] = 1
-      return [row]
-    })
-  }
-}
-
-function reshape3d(
-  flat: number[],
-  bsz: number,
-  dim: number,
-  len: number,
-): number[][][] {
-  const out: number[][][] = []
-  let idx = 0
-  for (let b = 0; b < bsz; b++) {
-    const batch: number[][] = []
-    for (let d = 0; d < dim; d++) {
-      const row: number[] = []
-      for (let t = 0; t < len; t++) row.push(flat[idx++])
-      batch.push(row)
-    }
-    out.push(batch)
-  }
-  return out
 }

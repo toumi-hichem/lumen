@@ -56,13 +56,16 @@ describe('TtsController', () => {
     expect(controller.getStatus()).toBe('idle')
   })
 
-  it('prefetches each upcoming chunk to pipeline synthesis', async () => {
+  it('prefetches upcoming chunks (depth 2) to pipeline synthesis', async () => {
     const controller = new TtsController({})
     await controller.useEngine('fake-ok')
     await controller.play(['one', 'two', 'three'], opts)
 
-    // Every chunk after the first is prefetched while the prior one plays.
-    expect(lastEngine?.prefetched).toEqual(['two', 'three'])
+    // Every chunk after the first is prefetched while a prior one plays.
+    // Depth-2 lookahead may request the same chunk more than once; the
+    // engine's cache dedupes, so only coverage and order matter here.
+    expect(lastEngine?.prefetched[0]).toBe('two')
+    expect(new Set(lastEngine?.prefetched)).toEqual(new Set(['two', 'three']))
   })
 
   it('resolves the active engine id after loading', async () => {
