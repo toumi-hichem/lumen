@@ -170,6 +170,8 @@ export class FoliateEngine implements BookEngine {
     const renderer = this.view?.renderer
     if (!renderer) return
     renderer.setStyles?.(buildCss(theme))
+    // The margin preference drives the paginator's gap attribute.
+    this.configureRenderer()
     if (this.container) {
       this.container.style.background = theme.pageBackground
     }
@@ -309,8 +311,17 @@ export class FoliateEngine implements BookEngine {
     renderer.setAttribute('animated', '')
     // Single column matches the app's phone-first layout on every width.
     renderer.setAttribute('max-column-count', '1')
-    renderer.setAttribute('margin', '24px')
-    renderer.setAttribute('gap', '6%')
+    // Foliate reserves this block space for its running head/foot bars, which
+    // Lumen doesn't use; keep it minimal.
+    renderer.setAttribute('margin', '12px')
+    // The paginator's outer side padding is `gap` (a percentage of container
+    // width). It is the single source of horizontal spacing (the injected CSS
+    // adds no body padding), sized so the padding tracks the user's margin
+    // preference in pixels.
+    const width = this.container?.clientWidth || 400
+    const marginPx = this.lastTheme?.margin ?? 16
+    const gapPercent = Math.min(8, Math.max(1.5, (marginPx / width) * 100))
+    renderer.setAttribute('gap', `${gapPercent.toFixed(1)}%`)
   }
 
   private attachDocListeners(doc: Document, index: number): void {
@@ -404,7 +415,6 @@ function buildCss(theme: ReaderTheme): string {
     body {
       font-family: ${theme.fontFamily} !important;
       line-height: ${theme.lineHeight} !important;
-      padding: 0 ${theme.margin}px !important;
       letter-spacing: ${theme.letterSpacing}em !important;
       -webkit-touch-callout: none;
     }
