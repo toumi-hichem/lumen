@@ -1,6 +1,6 @@
 import { getErrorMessage } from '@/lib/result'
 import { createTtsEngine, fallbackEngineId } from './registry'
-import type { SpeakOptions, TtsEngine } from './types'
+import type { SpeakOptions, TtsEngine, TtsEngineNotice } from './types'
 
 export type TtsStatus = 'idle' | 'loading' | 'playing' | 'paused'
 
@@ -20,6 +20,9 @@ export interface TtsControllerEvents {
   ) => void
   /** Fired only when all chunks finished naturally (not on stop/pause). */
   onComplete?: () => void
+  /** Engine progress signals: model load start/finish (with timing) and
+   *  per-chunk synthesis start. Drives "is anything happening?" UI. */
+  onNotice?: (notice: TtsEngineNotice) => void
 }
 
 /**
@@ -39,6 +42,8 @@ export class TtsController {
   private initForId = ''
   /** True while an engine with native queue playback owns sequencing. */
   private queueMode = false
+  /** Voice/rate changed while a queue was paused; re-hand it over on resume. */
+  private queueOptionsStale = false
 
   constructor(private readonly events: TtsControllerEvents = {}) {}
 
@@ -115,6 +120,12 @@ export class TtsController {
   async resume(): Promise<void> {
     if (this.status !== 'paused') return
     if (this.queueMode) {
+      if (this.queueOptionsStale) {
+        this.queueOptionsStale = false
+        // Options changed while paused; re-hand the queue with new options.
+        await this.play(this.chunks, this.options, this.index)
+        return
+      }
       this.setStatus('playing')
       await this.engine?.resumeQueue?.()
       return
@@ -130,7 +141,22 @@ export class TtsController {
   }
 
   setOptions(options: SpeakOptions): void {
+    const prev = this.options
     this.options = options
+    // Chunk-by-chunk engines pick options up on the next sentence, but a
+    // queue engine (the native service) received voice and rate when the
+    // whole queue was handed over. Re-hand the queue from the current
+    // sentence so the change is audible now, not on the next chapter.
+    if (
+      this.queueMode &&
+      (options.voiceId !== prev.voiceId || options.rate !== prev.rate)
+    ) {
+      if (this.status === 'playing') {
+        void this.play(this.chunks, options, this.index)
+      } else if (this.status === 'paused') {
+        this.queueOptionsStale = true
+      }
+    }
   }
 
   dispose(): void {
@@ -210,6 +236,7 @@ export class TtsController {
   ): Promise<{ id: string; reason?: string }> {
     try {
       const engine = createTtsEngine(id)
+      engine.onNotice = (notice) => this.events.onNotice?.(notice)
       await engine.init()
       this.engine = engine
       return { id: engine.id }
@@ -224,6 +251,7 @@ export class TtsController {
       // reason so the UI can tell the user why their choice didn't load.
       try {
         const fallback = createTtsEngine(fallbackId)
+        fallback.onNotice = (notice) => this.events.onNotice?.(notice)
         await fallback.init()
         this.engine = fallback
         return { id: fallback.id, reason }

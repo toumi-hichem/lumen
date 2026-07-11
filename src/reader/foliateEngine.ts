@@ -18,7 +18,6 @@ import {
   type TocItem,
 } from './types'
 
-const READALONG_PREFIX = 'lumen-readalong:'
 
 interface ChunkSpan {
   chunk: SpeakableChunk
@@ -107,7 +106,7 @@ export class FoliateEngine implements BookEngine {
       void (async () => {
         const { Overlayer } = await import('foliate-js/overlayer.js')
         const { draw, annotation } = e.detail
-        const color = annotation.value.startsWith(READALONG_PREFIX)
+        const color = annotation.value === this.readalongValue
           ? this.readalongColor
           : this.highlights.get(annotation.value)?.cssColor
         if (color) draw(Overlayer.highlight, { color })
@@ -232,11 +231,14 @@ export class FoliateEngine implements BookEngine {
         const range = content.doc.createRange()
         range.setStart(dc.startNode, dc.startOffset)
         range.setEnd(dc.endNode, dc.endOffset)
-        let anchor: string
+        // A failed CFI must not drop the chunk from narration — it only
+        // loses its highlight/scroll anchor. Silently skipping here was the
+        // cause of whole sentences missing from read-aloud.
+        let anchor: string | null
         try {
           anchor = this.view.getCFI(content.index, range)
         } catch {
-          continue
+          anchor = null
         }
         const chunk: SpeakableChunk = { index, text: dc.text, anchor }
         result.push(chunk)
@@ -254,14 +256,30 @@ export class FoliateEngine implements BookEngine {
   locateChunk(chunk: SpeakableChunk): void {
     if (!this.view) return
     this.clearSpokenHighlight()
-    const value = READALONG_PREFIX + chunk.anchor
-    this.readalongValue = value
-    void this.view.addAnnotation({ value }).catch(() => undefined)
+    if (!chunk.anchor) return // unanchored chunk: narrated but not highlightable
+    // The annotation value must be the RAW CFI: foliate-js feeds it straight
+    // into resolveNavigation, so any marker prefix makes resolution fail
+    // silently and the highlight never draws. Read-along annotations are
+    // told apart from user highlights by identity (readalongValue), not by
+    // mangling the value.
+    this.readalongValue = chunk.anchor
+    void this.view.addAnnotation({ value: chunk.anchor }).catch(() => undefined)
     // Follow the spoken text: page/scroll to it. Resolve + goTo on the
     // renderer directly so read-along doesn't spam the navigation history.
+    // We don't await goTo() to avoid blocking playback, but we do fire it
+    // so the UI advances to show the chunk being spoken.
     try {
       const resolved = this.view.resolveNavigation(chunk.anchor)
-      if (resolved) void this.view.renderer.goTo(resolved)
+      if (resolved) {
+        // goTo may return a Promise; fire it without waiting so the
+        // navigation happens in the background while audio plays.
+        const result = this.view.renderer.goTo(resolved)
+        if (result instanceof Promise) {
+          void result.catch(() => {
+            // Anchor may be stale after a relayout; ignore errors.
+          })
+        }
+      }
     } catch {
       // Anchor may be stale after a relayout; ignore.
     }
@@ -269,7 +287,12 @@ export class FoliateEngine implements BookEngine {
 
   clearSpokenHighlight(): void {
     if (this.readalongValue && this.view) {
-      void this.view.deleteAnnotation({ value: this.readalongValue })
+      const value = this.readalongValue
+      void this.view.deleteAnnotation({ value })
+      // If a user highlight shares this exact range, restore its overlay.
+      if (this.highlights.has(value)) {
+        void this.view.addAnnotation({ value }).catch(() => undefined)
+      }
     }
     this.readalongValue = null
   }
