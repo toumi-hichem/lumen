@@ -25,6 +25,11 @@ export interface ReaderTtsApi {
   /** Persistent notice when the chosen engine failed and we fell back. */
   fallbackReason?: string
   chunks: SpeakableChunk[]
+  /** Voice model load state: null until known, then loading or ready+time. */
+  modelState: { phase: 'loading' } | { phase: 'ready'; loadMs: number } | null
+  /** Index of the chunk currently being synthesized (feedback that the
+   *  engine is working), or null when no synthesis is in flight. */
+  synthesizingIndex: number | null
   /** Minutes set on the sleep timer, or null if off. */
   sleepMinutes: number | null
   /** Seconds remaining on the sleep timer, updated every second. */
@@ -47,6 +52,8 @@ export function useTts(options: UseTtsOptions = {}): ReaderTtsApi {
   const [chunks, setChunks] = useState<SpeakableChunk[]>([])
   const [sleepMinutes, setSleepMinutes] = useState<number | null>(null)
   const [sleepSecondsRemaining, setSleepSecondsRemaining] = useState<number | null>(null)
+  const [modelState, setModelState] = useState<ReaderTtsApi['modelState']>(null)
+  const [synthesizingIndex, setSynthesizingIndex] = useState<number | null>(null)
 
   const sleepTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const sleepCountdown = useRef<ReturnType<typeof setInterval>>(undefined)
@@ -89,6 +96,15 @@ export function useTts(options: UseTtsOptions = {}): ReaderTtsApi {
         }
       },
       onComplete: () => onCompleteRef.current?.(),
+      onNotice: (notice) => {
+        if (notice.type === 'model-loading') {
+          setModelState({ phase: 'loading' })
+        } else if (notice.type === 'model-ready') {
+          setModelState({ phase: 'ready', loadMs: notice.elapsedMs })
+        } else {
+          setSynthesizingIndex(notice.index)
+        }
+      },
     })
   }
 
@@ -111,6 +127,11 @@ export function useTts(options: UseTtsOptions = {}): ReaderTtsApi {
       updateMediaSessionLine(chunks[chunkIndex].text)
     }
   }, [chunkIndex, chunks, status])
+
+  // Synthesis-progress feedback only makes sense while narration is active.
+  useEffect(() => {
+    if (status === 'idle') setSynthesizingIndex(null)
+  }, [status])
 
   // Lock-screen / headset media controls.
   useEffect(() => {
@@ -189,6 +210,8 @@ export function useTts(options: UseTtsOptions = {}): ReaderTtsApi {
     error,
     fallbackReason,
     chunks,
+    modelState,
+    synthesizingIndex,
     sleepMinutes,
     sleepSecondsRemaining,
     start,

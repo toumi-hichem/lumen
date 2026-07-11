@@ -3,6 +3,7 @@ import { PcmAudioPlayer } from './audioPlayer'
 import {
   type SpeakOptions,
   type TtsEngine,
+  type TtsEngineNotice,
   type TtsVoice,
   TtsNotAvailableError,
 } from './types'
@@ -94,6 +95,7 @@ export class SupertonicEngine implements TtsEngine {
   private synthQueue: Promise<unknown> = Promise.resolve()
 
   private readonly options: SupertonicConfigOptions
+  onNotice?: (notice: TtsEngineNotice) => void
 
   constructor(options: SupertonicConfigOptions = {}) {
     this.options = options
@@ -101,6 +103,8 @@ export class SupertonicEngine implements TtsEngine {
 
   async init(): Promise<void> {
     if (this.ready) return
+    const loadStart = performance.now()
+    this.onNotice?.({ type: 'model-loading' })
     try {
       // A custom asset source can't cross the worker boundary; run inline.
       if (!this.options.source && typeof Worker !== 'undefined') {
@@ -119,6 +123,10 @@ export class SupertonicEngine implements TtsEngine {
       }
       this.sampleRate = this.info.sampleRate
       this.ready = true
+      this.onNotice?.({
+        type: 'model-ready',
+        elapsedMs: Math.round(performance.now() - loadStart),
+      })
     } catch (error) {
       throw new TtsNotAvailableError(this.id, getErrorMessage(error))
     }

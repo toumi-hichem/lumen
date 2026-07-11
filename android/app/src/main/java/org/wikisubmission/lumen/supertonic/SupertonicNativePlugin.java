@@ -38,6 +38,9 @@ public class SupertonicNativePlugin extends Plugin {
 
     static final String NOTIFICATIONS = "notifications";
 
+    /** Full denoising quality; requests without an explicit `steps` use it. */
+    private static final int DEFAULT_STEPS = 8;
+
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     private SupertonicModelStore store() {
@@ -79,9 +82,36 @@ public class SupertonicNativePlugin extends Plugin {
     public void removeModels(PluginCall call) {
         executor.execute(() -> {
             stopServicePlayback();
+            // The cached sessions hold the model files open; drop them first.
+            SupertonicRuntimeHolder.release();
             store().clear();
             call.resolve();
         });
+    }
+
+    /**
+     * Detected CPU topology and the inference strategy derived from it, for
+     * the settings UI and debugging. Detection itself stays native — the web
+     * layer never configures threads/steps, it only observes the choice.
+     */
+    @PluginMethod
+    public void getCpuTopology(PluginCall call) {
+        CpuTopology topology = CpuTopology.detect();
+        JSArray clusters = new JSArray();
+        for (CpuTopology.Cluster cluster : topology.clusters()) {
+            JSObject entry = new JSObject();
+            entry.put("cores", cluster.cores);
+            entry.put("maxFreqKhz", cluster.maxFreqKhz);
+            clusters.put(entry);
+        }
+        JSObject result = new JSObject();
+        result.put("totalCores", topology.totalCores());
+        result.put("clusters", clusters);
+        result.put("threads", topology.inferenceThreads());
+        result.put("initialSteps", topology.initialSteps(DEFAULT_STEPS));
+        result.put("source", topology.source());
+        result.put("summary", topology.toString());
+        call.resolve(result);
     }
 
     @PluginMethod
@@ -136,7 +166,7 @@ public class SupertonicNativePlugin extends Plugin {
             chunks,
             sanitizeVoiceId(call.getString("voiceId")),
             call.getFloat("rate", 1.0f),
-            call.getInt("steps", 8),
+            call.getInt("steps", DEFAULT_STEPS),
             call.getInt("startIndex", 0),
             call.getString("lang", "en"),
             call.getString("title", null)
@@ -166,6 +196,28 @@ public class SupertonicNativePlugin extends Plugin {
                 JSObject data = new JSObject();
                 data.put("message", errorMessage);
                 notifyListeners("error", data);
+            }
+
+            @Override
+            public void onModelLoading() {
+                JSObject data = new JSObject();
+                data.put("state", "loading");
+                notifyListeners("modelState", data);
+            }
+
+            @Override
+            public void onModelReady(long elapsedMs) {
+                JSObject data = new JSObject();
+                data.put("state", "ready");
+                data.put("elapsedMs", elapsedMs);
+                notifyListeners("modelState", data);
+            }
+
+            @Override
+            public void onSynthesizing(int index) {
+                JSObject data = new JSObject();
+                data.put("index", index);
+                notifyListeners("synthesizing", data);
             }
         });
 

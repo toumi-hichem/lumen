@@ -167,6 +167,10 @@ export interface TtsPanelProps {
   ttsStatus: TtsStatus
   ttsError?: string
   ttsFallbackReason?: string
+  ttsModelState: { phase: 'loading' } | { phase: 'ready'; loadMs: number } | null
+  ttsChunkIndex: number
+  ttsSynthesizingIndex: number | null
+  ttsChunkCount: number
   ttsSleepMinutes: number | null
   ttsSleepSecondsRemaining: number | null
   onTtsPlay: () => void
@@ -177,22 +181,47 @@ export interface TtsPanelProps {
   onBack: () => void
 }
 
-export function TtsPanel({
-  ttsStatus,
-  ttsError,
-  ttsFallbackReason,
-  ttsSleepMinutes,
-  ttsSleepSecondsRemaining,
-  onTtsPlay,
-  onTtsPause,
-  onTtsResume,
-  onTtsStop,
-  onTtsSetSleep,
-  onBack,
-}: TtsPanelProps) {
+/**
+ * One-line, reader-friendly progress readout: how fast the voice got ready,
+ * where narration is, and how many sentences are already prepared ahead.
+ */
+function ttsProgressLine(props: TtsPanelProps): string | null {
+  const { ttsStatus, ttsModelState, ttsChunkIndex, ttsSynthesizingIndex, ttsChunkCount } = props
+  if (ttsModelState?.phase === 'loading') {
+    return 'Getting your voice ready — a one-time setup, just a moment…'
+  }
+  const parts: string[] = []
+  if (ttsModelState?.phase === 'ready' && ttsModelState.loadMs > 0) {
+    parts.push(`Voice ready in ${(ttsModelState.loadMs / 1000).toFixed(1)}s`)
+  }
+  if (ttsStatus === 'playing' && ttsChunkCount > 0) {
+    parts.push(`Sentence ${ttsChunkIndex + 1} of ${ttsChunkCount}`)
+    const ahead = ttsSynthesizingIndex !== null ? ttsSynthesizingIndex - ttsChunkIndex : 0
+    if (ahead > 0) {
+      parts.push(`next ${ahead === 1 ? 'sentence' : `${ahead} sentences`} already prepared`)
+    }
+  }
+  return parts.length ? parts.join(' · ') : null
+}
+
+export function TtsPanel(props: TtsPanelProps) {
+  const {
+    ttsStatus,
+    ttsError,
+    ttsFallbackReason,
+    ttsSleepMinutes,
+    ttsSleepSecondsRemaining,
+    onTtsPlay,
+    onTtsPause,
+    onTtsResume,
+    onTtsStop,
+    onTtsSetSleep,
+    onBack,
+  } = props
   const ttsPrefs = useSettingsStore((s) => s.tts)
   const setTts = useSettingsStore((s) => s.setTts)
   const voices = useVoices(ttsPrefs.engineId)
+  const progressLine = ttsProgressLine(props)
 
   return (
     <div className="reader-footer-panel">
@@ -212,6 +241,11 @@ export function TtsPanel({
         <div className="error-banner" role="alert" style={{ marginBottom: 12 }}>
           {ttsError}
         </div>
+      )}
+      {progressLine && (
+        <p className="muted" role="status" style={{ fontSize: 12, margin: '0 0 10px' }}>
+          {progressLine}
+        </p>
       )}
 
       <div className="reader-footer-tts-controls">

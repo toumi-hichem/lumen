@@ -260,7 +260,7 @@ export class TextEngine implements BookEngine {
   }
 
   locateChunk(chunk: SpeakableChunk): void {
-    if (!this.content || !supportsHighlightApi()) return
+    if (!this.content || !supportsHighlightApi() || !chunk.anchor) return
     const parsed = parseTextRange(chunk.anchor)
     if (!parsed) return
     const range = rangeFromOffsets(this.content, parsed.start, parsed.end)

@@ -26,17 +26,23 @@ export const SUPERTONIC_MANIFEST: readonly string[] = [
 ]
 
 /** Approximate total download size, shown to the user before downloading. */
-export const SUPERTONIC_SIZE_MB = 100
+export const SUPERTONIC_SIZE_MB = 400
 
 /**
  * Remote source. The HuggingFace repo serves `onnx/` and `voice_styles/` at the
  * repository root. Point this at your own server later (same layout) by
  * changing this one constant — the rest of the app is unaffected.
+ *
+ * Supertonic 3: same ONNX I/O contract as v1/v2, but fixes their documented
+ * skip/repeat failures on short inputs. When changing generations, bump
+ * CACHE_NAME too so stale weights are never mixed with current ones.
  */
 export const SUPERTONIC_REMOTE_BASE =
-  'https://huggingface.co/Supertone/supertonic/resolve/main'
+  'https://huggingface.co/Supertone/supertonic-3/resolve/main'
 
-const CACHE_NAME = 'lumen-supertonic-v1'
+const CACHE_NAME = 'lumen-supertonic-v3'
+/** Cache names from previous model generations, deleted on sight. */
+const LEGACY_CACHE_NAMES = ['lumen-supertonic-v1']
 
 /** Bundled fallback (dev: scripts/fetch-supertonic.sh drops assets here). */
 const PUBLIC_BASE = `${import.meta.env.BASE_URL ?? '/'}supertonic`
@@ -108,10 +114,22 @@ export async function isSupertonicDownloaded(): Promise<boolean> {
   return true
 }
 
-/** Remove all downloaded Supertonic assets. */
+/** Remove all downloaded Supertonic assets (current and legacy versions). */
 export async function clearSupertonic(): Promise<void> {
   if (!cachesAvailable()) return
   await caches.delete(CACHE_NAME)
+  await clearLegacyCaches()
+}
+
+/** Best-effort deletion of caches from previous model generations. */
+async function clearLegacyCaches(): Promise<void> {
+  for (const name of LEGACY_CACHE_NAMES) {
+    try {
+      await caches.delete(name)
+    } catch {
+      // Reclaiming old storage is opportunistic; never block on it.
+    }
+  }
 }
 
 /** Best-effort storage pre-check so we fail early with a clear message. */
@@ -153,6 +171,8 @@ export async function downloadSupertonic(
     )
   }
   await assertQuota()
+  // Free the space held by weights from a previous model generation first.
+  await clearLegacyCaches()
 
   const cache = await caches.open(CACHE_NAME)
   const total = SUPERTONIC_MANIFEST.length

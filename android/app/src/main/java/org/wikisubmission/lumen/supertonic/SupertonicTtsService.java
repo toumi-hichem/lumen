@@ -13,11 +13,13 @@ import android.media.AudioFocusRequest;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioTrack;
+import android.media.MediaMetadata;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
+import android.os.SystemClock;
 import android.util.Log;
 
 import java.util.List;
@@ -42,6 +44,8 @@ public class SupertonicTtsService extends Service {
     private static final String TAG = "SupertonicTts";
     private static final String CHANNEL_ID = "lumen_tts";
     private static final int NOTIFICATION_ID = 41;
+    /** Quality floor for the adaptive step reduction (web engine uses 4 too). */
+    private static final int MIN_STEPS = 4;
 
     static final String ACTION_START = "org.wikisubmission.lumen.tts.START";
     static final String ACTION_PLAY_PAUSE = "org.wikisubmission.lumen.tts.PLAY_PAUSE";
@@ -58,6 +62,15 @@ public class SupertonicTtsService extends Service {
         void onComplete();
 
         void onError(String message);
+
+        /** Model sessions are being created (first play of this process). */
+        void onModelLoading();
+
+        /** Model sessions ready; elapsedMs is 0 when already loaded. */
+        void onModelReady(long elapsedMs);
+
+        /** Synthesis of chunk `index` started (audio may still be queued). */
+        void onSynthesizing(int index);
     }
 
     static final class Request {
@@ -108,6 +121,8 @@ public class SupertonicTtsService extends Service {
     private long framesWritten = 0;
 
     private SupertonicRuntime runtime;
+    /** 0.3 s of silence written between chunks, like the official pipeline. */
+    private float[] interChunkSilence = new float[0];
     private AudioTrack audioTrack;
     private MediaSession mediaSession;
     private PowerManager.WakeLock wakeLock;
@@ -116,6 +131,8 @@ public class SupertonicTtsService extends Service {
     private Thread synthesisThread;
     private Thread playbackThread;
     private Request request;
+    /** Line shown in the notification: the sentence being spoken, or a status. */
+    private volatile String currentLine;
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -160,6 +177,7 @@ public class SupertonicTtsService extends Service {
         this.request = req;
         this.cancelled.set(false);
         this.paused = false;
+        this.currentLine = null;
 
         createMediaSession();
         goForeground(true);
@@ -171,9 +189,20 @@ public class SupertonicTtsService extends Service {
 
     private void runPipeline() {
         BlockingQueue<Synthesized> buffer = new ArrayBlockingQueue<>(2);
+        Listener l = listener;
         try {
-            if (runtime == null) {
-                runtime = new SupertonicRuntime(new SupertonicModelStore(this));
+            // The runtime is process-wide (SupertonicRuntimeHolder): loading
+            // the four ONNX sessions takes seconds, so it must survive this
+            // service instance, which stops itself after every queue.
+            boolean wasLoaded = SupertonicRuntimeHolder.isLoaded();
+            if (!wasLoaded) {
+                updateNotificationLine("Loading voice model…");
+                if (l != null) l.onModelLoading();
+            }
+            long loadStart = SystemClock.elapsedRealtime();
+            runtime = SupertonicRuntimeHolder.obtain(this, null);
+            if (l != null) {
+                l.onModelReady(wasLoaded ? 0 : SystemClock.elapsedRealtime() - loadStart);
             }
             if (!requestAudioFocus()) {
                 fail("Audio focus denied");
@@ -185,10 +214,42 @@ public class SupertonicTtsService extends Service {
             playbackThread.start();
 
             SupertonicRuntime.Style style = runtime.style(request.voiceId);
+            // Adaptive quality: start at the level the detected CPU topology
+            // can plausibly hold in realtime, then adapt from measured RTF —
+            // when synthesis is slower than playback (RTF above ~0.9,
+            // including a margin for the buffer), trade denoising steps for
+            // speed instead of leaving gaps between sentences; with clear
+            // headroom, claw quality back up to the requested level.
+            CpuTopology topology = CpuTopology.detect();
+            int steps = debugSteps(topology.initialSteps(request.steps));
+            Log.i(TAG, "Strategy for " + topology + ": "
+                + topology.inferenceThreads() + " threads, "
+                + steps + "/" + request.steps + " initial steps");
             for (int i = request.startIndex; i < request.chunks.size(); i++) {
                 if (cancelled.get()) break;
+                if (l != null) l.onSynthesizing(i);
+                long t0 = SystemClock.elapsedRealtime();
                 float[] samples = runtime.synthesize(
-                    request.chunks.get(i), request.lang, style, request.steps, request.rate, cancelled);
+                    request.chunks.get(i), request.lang, style, steps, request.rate, cancelled);
+                long ms = SystemClock.elapsedRealtime() - t0;
+                double audioSec = samples.length / (double) runtime.sampleRate();
+                double rtf = audioSec > 0 ? (ms / 1000.0) / audioSec : 0;
+                Log.d(TAG, "Synthesized chunk " + i + " ("
+                    + request.chunks.get(i).length() + " chars, " + steps + " steps) in "
+                    + ms + " ms, rtf=" + String.format(java.util.Locale.US, "%.2f", rtf));
+                // Short utterances (headings) and the first-inference warmup
+                // both skew RTF upward; only adapt on a meaningful sample.
+                if (audioSec >= 3) {
+                    if (rtf > 0.9 && steps > MIN_STEPS) {
+                        steps = Math.max(MIN_STEPS, steps - 2);
+                        Log.i(TAG, "Device slower than realtime, reducing steps to " + steps);
+                    } else if (rtf < 0.55 && steps < request.steps) {
+                        // Ample headroom (e.g. downgraded by one transient
+                        // slow chunk): claw quality back one step at a time.
+                        steps += 1;
+                        Log.i(TAG, "Device has headroom, raising steps to " + steps);
+                    }
+                }
                 buffer.put(new Synthesized(i, samples));
             }
             buffer.put(END);
@@ -212,8 +273,12 @@ public class SupertonicTtsService extends Service {
                     return;
                 }
                 if (l != null) l.onChunk(chunk.index);
+                updateNotificationLine(request.chunks.get(chunk.index));
                 updatePlaybackState(true);
                 writeFully(chunk.samples);
+                // The official pipeline joins chunks with 0.3 s of silence;
+                // without it consecutive sentences run into each other.
+                writeFully(interChunkSilence);
             }
         } catch (InterruptedException e) {
             // Stopped.
@@ -335,10 +400,10 @@ public class SupertonicTtsService extends Service {
             mediaSession.release();
             mediaSession = null;
         }
-        if (runtime != null) {
-            runtime.close();
-            runtime = null;
-        }
+        // The runtime is owned by SupertonicRuntimeHolder and deliberately
+        // survives this service: closing it here forced a multi-second model
+        // reload on every play.
+        runtime = null;
         super.onDestroy();
     }
 
@@ -357,6 +422,7 @@ public class SupertonicTtsService extends Service {
             audioTrack = null;
         }
         framesWritten = 0;
+        interChunkSilence = new float[(int) (sampleRate * 0.3f)];
         int minBuffer = AudioTrack.getMinBufferSize(
             sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_FLOAT);
         audioTrack = new AudioTrack.Builder()
@@ -461,6 +527,27 @@ public class SupertonicTtsService extends Service {
             .build());
     }
 
+    /**
+     * Show `line` (the sentence being spoken, or a status like "Loading voice
+     * model…") in the media notification and on the lock screen. Safe from any
+     * thread; notification managers are thread-safe.
+     */
+    private void updateNotificationLine(String line) {
+        currentLine = line;
+        if (mediaSession != null) {
+            mediaSession.setMetadata(new MediaMetadata.Builder()
+                .putString(MediaMetadata.METADATA_KEY_TITLE,
+                    request != null && request.title != null ? request.title : "Reading aloud")
+                .putString(MediaMetadata.METADATA_KEY_ARTIST, line)
+                .build());
+        }
+        NotificationManager manager =
+            (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager != null) {
+            manager.notify(NOTIFICATION_ID, buildNotification(!paused));
+        }
+    }
+
     private void goForeground(boolean playing) {
         Notification notification = buildNotification(playing);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -490,10 +577,11 @@ public class SupertonicTtsService extends Service {
         Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
             ? new Notification.Builder(this, CHANNEL_ID)
             : new Notification.Builder(this);
+        String line = currentLine;
         builder
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentTitle(request != null && request.title != null ? request.title : "Reading aloud")
-            .setContentText(playing ? "Playing" : "Paused")
+            .setContentText(line != null && !line.isEmpty() ? line : (playing ? "Playing" : "Paused"))
             .setContentIntent(open)
             .setOngoing(playing)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
@@ -512,6 +600,12 @@ public class SupertonicTtsService extends Service {
         Intent intent = new Intent(this, SupertonicTtsService.class).setAction(action);
         return PendingIntent.getService(this, code, intent,
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+    }
+
+    /** `adb shell setprop debug.lumen.tts.steps N` overrides for experiments. */
+    private static int debugSteps(int requested) {
+        int forced = CpuTopology.intProp("debug.lumen.tts.steps");
+        return forced > 0 ? forced : requested;
     }
 
     private static String userMessage(Exception e) {

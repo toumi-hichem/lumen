@@ -56,9 +56,13 @@ final class SupertonicRuntime implements AutoCloseable {
     private final SupertonicModelStore store;
     private final Map<String, Style> styleCache = new HashMap<>();
     private final Random random = new Random();
+    private final CpuTopology topology;
 
     SupertonicRuntime(SupertonicModelStore store) throws Exception {
         this.store = store;
+        this.topology = CpuTopology.detect();
+        android.util.Log.i("SupertonicTts", "CPU topology " + topology
+            + ": " + topology.inferenceThreads() + " intra-op threads");
         this.env = OrtEnvironment.getEnvironment();
         this.cfg = SupertonicConfig.fromJson(store.readText("onnx/tts.json"));
         this.processor = new UnicodeTextProcessor(store.readText("onnx/unicode_indexer.json"));
@@ -81,13 +85,13 @@ final class SupertonicRuntime implements AutoCloseable {
      * with different tensor shapes were noise, consistent with XNNPACK
      * shape-cache misbehavior on this model. sherpa-onnx ships the plain CPU
      * provider for all its Android TTS models (including Supertonic) for the
-     * same reason; it is the proven-correct multithreaded path.
+     * same reason; it is the proven-correct multithreaded path. Thread count
+     * comes from the detected CPU topology (see CpuTopology).
      */
     private OrtSession.SessionOptions buildSessionOptions() throws Exception {
-        int threads = Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors() - 1));
         OrtSession.SessionOptions options = new OrtSession.SessionOptions();
         options.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT);
-        options.setIntraOpNumThreads(threads);
+        options.setIntraOpNumThreads(topology.inferenceThreads());
         return options;
     }
 

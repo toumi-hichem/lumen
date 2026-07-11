@@ -11,9 +11,11 @@ set -euo pipefail
 
 DEST="public/supertonic"
 TMP="$(mktemp -d)"
-REPO="https://huggingface.co/Supertone/supertonic"
+# Supertonic 3: keep in sync with SUPERTONIC_REMOTE_BASE (src/tts/supertonic/
+# assets.ts) and REMOTE_BASE (SupertonicModelStore.java).
+REPO="https://huggingface.co/Supertone/supertonic-3"
 
-echo "Cloning Supertonic assets (this downloads ~100MB of models)..."
+echo "Cloning Supertonic assets (this downloads ~400MB of models)..."
 git clone --depth 1 "$REPO" "$TMP/supertonic"
 
 mkdir -p "$DEST/onnx" "$DEST/voice_styles"

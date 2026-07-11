@@ -3,6 +3,7 @@ import { getErrorMessage } from '@/lib/result'
 import {
   type SpeakOptions,
   type TtsEngine,
+  type TtsEngineNotice,
   type TtsQueueEvents,
   type TtsVoice,
   TtsNotAvailableError,
@@ -43,6 +44,7 @@ export class SupertonicNativeEngine implements TtsEngine {
   private ready = false
   private listeners: PluginListenerHandle[] = []
   private queueEvents: TtsQueueEvents | null = null
+  onNotice?: (notice: TtsEngineNotice) => void
 
   async init(): Promise<void> {
     if (this.ready) return
@@ -129,6 +131,16 @@ export class SupertonicNativeEngine implements TtsEngine {
       }),
       SupertonicNative.addListener('error', ({ message }) => {
         this.queueEvents?.onError(message)
+      }),
+      SupertonicNative.addListener('modelState', ({ state, elapsedMs }) => {
+        this.onNotice?.(
+          state === 'loading'
+            ? { type: 'model-loading' }
+            : { type: 'model-ready', elapsedMs: elapsedMs ?? 0 },
+        )
+      }),
+      SupertonicNative.addListener('synthesizing', ({ index }) => {
+        this.onNotice?.({ type: 'synthesizing', index })
       }),
     ])
   }

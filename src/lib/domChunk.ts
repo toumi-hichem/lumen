@@ -21,9 +21,36 @@ interface NodeEntry {
   /** Global offset of this node's first character across all text nodes. */
   start: number
   length: number
+  /** Nearest block-level ancestor, used to break chunks at block boundaries. */
+  block: Element | null
 }
 
 const TERMINATOR = /[.!?…。！？]/
+
+/**
+ * Block-level elements that end a speakable chunk. A heading or paragraph
+ * must never be merged with its neighbour: the joined text nodes have no
+ * separator ("IIIThe next day…"), the merged range spans block elements
+ * (which makes CFI anchoring fragile), and the read-along highlight would
+ * cover more than one paragraph.
+ */
+const BLOCK_TAGS = new Set([
+  'ADDRESS', 'ARTICLE', 'ASIDE', 'BLOCKQUOTE', 'DD', 'DIV', 'DL', 'DT',
+  'FIGCAPTION', 'FIGURE', 'FOOTER', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
+  'HEADER', 'HR', 'LI', 'MAIN', 'NAV', 'OL', 'P', 'PRE', 'SECTION',
+  'TABLE', 'TD', 'TH', 'TR', 'UL',
+])
+
+function nearestBlock(node: Node): Element | null {
+  let el = node.parentElement
+  while (el) {
+    // EPUB sections are XHTML (XML) documents where tagName keeps the source
+    // (lower) case, unlike HTML documents; normalize before matching.
+    if (BLOCK_TAGS.has(el.tagName.toUpperCase())) return el
+    el = el.parentElement
+  }
+  return null
+}
 
 /** Collect text nodes under a root with their global offset ranges. */
 export function collectTextNodes(root: Node): NodeEntry[] {
@@ -34,7 +61,12 @@ export function collectTextNodes(root: Node): NodeEntry[] {
   let node = walker.nextNode()
   while (node) {
     const length = node.textContent?.length ?? 0
-    entries.push({ node: node as Text, start: total, length })
+    entries.push({
+      node: node as Text,
+      start: total,
+      length,
+      block: nearestBlock(node),
+    })
     total += length
     node = walker.nextNode()
   }
@@ -74,19 +106,32 @@ export function domToChunks(root: Node, maxChars = 240): DomChunk[] {
   if (!entries.length) return []
   const full = entries.map((e) => e.node.textContent ?? '').join('')
 
-  // 1) Split the raw text into sentence ranges covering the whole string.
+  // Global offsets where a new block element begins; sentences and packing
+  // must not cross them.
+  const boundaries = new Set<number>()
+  for (let n = 1; n < entries.length; n++) {
+    if (entries[n].block !== entries[n - 1].block) boundaries.add(entries[n].start)
+  }
+
+  // 1) Split the raw text into sentence ranges covering the whole string,
+  //    breaking at terminators and at block boundaries.
   const sentences: Array<[number, number]> = []
   let i = 0
   while (i < full.length) {
     let j = i
-    while (j < full.length && !TERMINATOR.test(full[j])) j++
-    while (j < full.length && TERMINATOR.test(full[j])) j++
-    while (j < full.length && /\s/.test(full[j])) j++
+    // A boundary at the sentence's own start (j === i) is not a break.
+    while (j < full.length && !TERMINATOR.test(full[j]) && (j === i || !boundaries.has(j))) j++
+    if (j < full.length && !boundaries.has(j)) {
+      while (j < full.length && TERMINATOR.test(full[j])) j++
+      while (j < full.length && /\s/.test(full[j]) && !boundaries.has(j)) j++
+    }
+    if (j === i) j++ // safety: always make progress
     sentences.push([i, j])
     i = j
   }
 
-  // 2) Pack short sentences together up to maxChars (by trimmed length).
+  // 2) Pack short sentences together up to maxChars (by trimmed length),
+  //    never across a block boundary.
   const packed: Array<[number, number]> = []
   let curStart = -1
   let curEnd = -1
@@ -97,7 +142,7 @@ export function domToChunks(root: Node, maxChars = 240): DomChunk[] {
       continue
     }
     const merged = full.slice(curStart, e).replace(/\s+/g, ' ').trim()
-    if (merged.length > maxChars) {
+    if (boundaries.has(s) || merged.length > maxChars) {
       packed.push([curStart, curEnd])
       curStart = s
       curEnd = e

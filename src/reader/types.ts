@@ -34,7 +34,12 @@ export interface SelectionInfo {
 export interface SpeakableChunk {
   index: number
   text: string
-  anchor: string
+  /**
+   * Null when the engine could not anchor the chunk (e.g. CFI generation
+   * failed for the range). The chunk is still narrated; it just cannot be
+   * highlighted or scrolled to.
+   */
+  anchor: string | null
 }
 
 /** A search match within a book, anchored for navigation. */

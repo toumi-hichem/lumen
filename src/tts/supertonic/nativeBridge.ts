@@ -14,9 +14,28 @@ export interface NativeDownloadProgress {
   total: number
 }
 
+/**
+ * Detected CPU layout and the inference strategy the native side derived
+ * from it. Read-only for the web layer: the device tunes itself, this is
+ * surfaced for the settings UI and debugging.
+ */
+export interface NativeCpuTopology {
+  totalCores: number
+  /** Core clusters grouped by max frequency, fastest first (0 = unknown). */
+  clusters: { cores: number; maxFreqKhz: number }[]
+  /** ORT intra-op threads the runtime will use. */
+  threads: number
+  /** Denoising steps synthesis starts at (RTF adaptation moves it live). */
+  initialSteps: number
+  source: 'sysfs' | 'override' | 'fallback'
+  /** Human-readable one-liner, e.g. "sysfs 2x2600MHz+6x2000MHz". */
+  summary: string
+}
+
 export interface SupertonicNativePlugin {
   isAvailable(): Promise<{ available: boolean }>
   isModelReady(): Promise<{ ready: boolean }>
+  getCpuTopology(): Promise<NativeCpuTopology>
   downloadModels(): Promise<void>
   removeModels(): Promise<void>
   speak(options: {
@@ -50,6 +69,14 @@ export interface SupertonicNativePlugin {
   addListener(
     eventName: 'downloadProgress',
     listener: (data: NativeDownloadProgress) => void,
+  ): Promise<PluginListenerHandle>
+  addListener(
+    eventName: 'modelState',
+    listener: (data: { state: 'loading' | 'ready'; elapsedMs?: number }) => void,
+  ): Promise<PluginListenerHandle>
+  addListener(
+    eventName: 'synthesizing',
+    listener: (data: { index: number }) => void,
   ): Promise<PluginListenerHandle>
   removeAllListeners(): Promise<void>
 }

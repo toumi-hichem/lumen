@@ -9,12 +9,28 @@ import {
   isSupertonicInstalled,
   removeSupertonic,
 } from '@/tts/supertonic/install'
+import {
+  hasNativeSupertonic,
+  SupertonicNative,
+  type NativeCpuTopology,
+} from '@/tts/supertonic/nativeBridge'
 
 type State = 'checking' | 'idle' | 'downloading' | 'installed' | 'error'
 
+/** "2 fast + 6 efficiency cores · 2 threads · quality starts at 6/8" */
+function describeTuning(t: NativeCpuTopology): string {
+  const [fast, ...rest] = t.clusters
+  const eff = rest.reduce((sum, c) => sum + c.cores, 0)
+  const cores =
+    eff > 0
+      ? `${fast.cores} fast + ${eff} efficiency cores`
+      : `${t.totalCores} cores`
+  return `${cores} · ${t.threads} thread${t.threads === 1 ? '' : 's'} · quality starts at ${t.initialSteps}/8`
+}
+
 /**
  * Download / manage the on-device Supertonic voice. Assets are large
- * (~100 MB) and fetched on demand, then cached for offline use. Storage and
+ * (~400 MB) and fetched on demand, then cached for offline use. Storage and
  * network failures are surfaced with a clear, actionable message.
  */
 export function SupertonicDownload() {
@@ -23,6 +39,7 @@ export function SupertonicDownload() {
   const [state, setState] = useState<State>('checking')
   const [progress, setProgress] = useState({ done: 0, total: 0 })
   const [error, setError] = useState<string>()
+  const [tuning, setTuning] = useState<string>()
 
   useEffect(() => {
     let active = true
@@ -33,6 +50,20 @@ export function SupertonicDownload() {
       active = false
     }
   }, [])
+
+  // Purely informational: how the native engine tuned itself to this CPU.
+  useEffect(() => {
+    if (state !== 'installed' || !hasNativeSupertonic()) return
+    let active = true
+    SupertonicNative.getCpuTopology()
+      .then((topology) => {
+        if (active) setTuning(describeTuning(topology))
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [state])
 
   const download = async () => {
     setError(undefined)
@@ -106,6 +137,10 @@ export function SupertonicDownload() {
         <div className="progress-track" aria-label="Download progress">
           <span style={{ width: `${pct}%` }} />
         </div>
+      )}
+
+      {state === 'installed' && tuning && (
+        <small className="muted">Tuned for this device: {tuning}</small>
       )}
 
       {error && (

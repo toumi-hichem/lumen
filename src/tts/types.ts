@@ -70,7 +70,20 @@ export interface TtsEngine {
 
   /** Release resources (audio context, ORT session). */
   dispose(): void
+
+  /**
+   * Optional: set by the controller to receive progress notices (model
+   * loading/ready with timing, per-chunk synthesis start). Engines without
+   * observable phases never call it.
+   */
+  onNotice?: (notice: TtsEngineNotice) => void
 }
+
+/** Progress signals surfaced to the UI ("is the TTS doing anything?"). */
+export type TtsEngineNotice =
+  | { type: 'model-loading' }
+  | { type: 'model-ready'; elapsedMs: number }
+  | { type: 'synthesizing'; index: number }
 
 /** Progress callbacks for engines that own full-queue playback natively. */
 export interface TtsQueueEvents {

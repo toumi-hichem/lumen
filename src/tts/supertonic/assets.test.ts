@@ -42,7 +42,11 @@ describe('supertonic assets manifest', () => {
     // /assets segment 404s (regression guard).
     expect(SUPERTONIC_REMOTE_BASE).not.toMatch(/\/assets$/)
     expect(supertonicRemoteUrl('onnx/vocoder.onnx')).toBe(
-      'https://huggingface.co/Supertone/supertonic/resolve/main/onnx/vocoder.onnx',
+      'https://huggingface.co/Supertone/supertonic-3/resolve/main/onnx/vocoder.onnx',
     )
+  })
+
+  it('uses Supertonic 3 weights (v1/v2 skip short inputs)', () => {
+    expect(SUPERTONIC_REMOTE_BASE).toContain('/supertonic-3/')
   })
 })

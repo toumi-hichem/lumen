@@ -382,6 +382,10 @@ export function ReaderScreen() {
           ttsStatus={tts.status}
           ttsError={tts.error}
           ttsFallbackReason={tts.fallbackReason}
+          ttsModelState={tts.modelState}
+          ttsChunkIndex={tts.chunkIndex}
+          ttsSynthesizingIndex={tts.synthesizingIndex}
+          ttsChunkCount={tts.chunks.length}
           ttsSleepMinutes={tts.sleepMinutes}
           ttsSleepSecondsRemaining={tts.sleepSecondsRemaining}
           onTtsPlay={() => void startReadAloud()}

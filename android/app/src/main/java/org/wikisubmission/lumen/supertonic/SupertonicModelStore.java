@@ -15,7 +15,7 @@ import java.nio.charset.StandardCharsets;
 /**
  * Owns the on-disk Supertonic model files under filesDir/supertonic, mirroring
  * the layout of the HuggingFace repo (onnx/*, voice_styles/*). The native side
- * downloads its own copy rather than trying to pull ~100 MB out of the
+ * downloads its own copy rather than trying to pull ~400 MB out of the
  * WebView's Cache Storage through the JS bridge.
  */
 final class SupertonicModelStore {
@@ -24,7 +24,15 @@ final class SupertonicModelStore {
         void onProgress(int done, int total);
     }
 
-    static final String REMOTE_BASE = "https://huggingface.co/Supertone/supertonic/resolve/main";
+    /**
+     * Supertonic 3 (same ONNX I/O contract as earlier generations). v1/v2
+     * weights had documented skip/repeat failures on short inputs that v3
+     * fixes. Bump MODEL_VERSION whenever this URL changes so stale weights
+     * from a previous version are re-downloaded instead of silently used.
+     */
+    static final String REMOTE_BASE = "https://huggingface.co/Supertone/supertonic-3/resolve/main";
+    static final String MODEL_VERSION = "supertonic-3";
+    private static final String VERSION_FILE = "model_version";
 
     static final String[] ONNX_FILES = {
         "duration_predictor.onnx",
@@ -57,11 +65,20 @@ final class SupertonicModelStore {
     }
 
     boolean isComplete() {
+        if (!isCurrentVersion()) return false;
         for (String rel : manifest()) {
             File f = file(rel);
             if (!f.isFile() || f.length() == 0) return false;
         }
         return true;
+    }
+
+    private boolean isCurrentVersion() {
+        try {
+            return MODEL_VERSION.equals(readText(VERSION_FILE).trim());
+        } catch (Exception e) {
+            return false; // no marker: pre-versioning install or nothing yet
+        }
     }
 
     String readText(String relPath) throws Exception {
@@ -81,6 +98,11 @@ final class SupertonicModelStore {
      * are skipped, so the download is resumable at file granularity.
      */
     void download(ProgressListener listener) throws Exception {
+        // Weights from a previous model version must not be mixed with the
+        // current ones; wipe them so every file is re-fetched.
+        if (root.isDirectory() && !isCurrentVersion()) {
+            clear();
+        }
         String[] manifest = manifest();
         int total = manifest.length;
         int done = 0;
@@ -92,6 +114,18 @@ final class SupertonicModelStore {
             }
             done += 1;
             listener.onProgress(done, total);
+        }
+        writeVersionMarker();
+    }
+
+    private void writeVersionMarker() throws Exception {
+        File marker = file(VERSION_FILE);
+        File parent = marker.getParentFile();
+        if (parent != null && !parent.isDirectory() && !parent.mkdirs()) {
+            throw new Exception("Cannot create directory " + parent);
+        }
+        try (OutputStream out = new FileOutputStream(marker)) {
+            out.write(MODEL_VERSION.getBytes(StandardCharsets.UTF_8));
         }
     }
 
