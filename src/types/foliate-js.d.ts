@@ -58,6 +58,8 @@ declare module 'foliate-js/view.js' {
     range?: Range
     tocItem?: FoliateTocItem
     pageItem?: FoliateTocItem
+    /** Spine position, from SectionProgress. */
+    section?: { current: number; total: number }
   }
 
   export interface ResolvedNavigation {
@@ -67,12 +69,13 @@ declare module 'foliate-js/view.js' {
 
   export interface FoliateSearchSubitem {
     cfi: string
-    excerpt: string
+    /** Match context; render as `pre + match + post`. */
+    excerpt: { pre: string; match: string; post: string }
   }
 
   export type FoliateSearchResult =
     | { progress: number }
-    | { index: number; subitems: FoliateSearchSubitem[] }
+    | { label?: string; subitems: FoliateSearchSubitem[] }
     | 'done'
 
   export class View extends HTMLElement {
@@ -111,6 +114,8 @@ declare module 'foliate-js/view.js' {
     }): AsyncGenerator<FoliateSearchResult>
     clearSearch(): void
     deselect(): void
+    /** Cumulative 0..1 start fraction of each spine section (last entry 1). */
+    getSectionFractions(): number[]
   }
 
   export function makeBook(file: Blob | string): Promise<FoliateBook>

@@ -3,18 +3,29 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sessionRepository } from '@/storage/sessionRepository'
 import { bookRepository } from '@/storage/bookRepository'
-import { computeStats, type ReadingStats } from '@/services/readingStats'
+import {
+  computeReadingSpeed,
+  computeStats,
+  type ReadingStats,
+} from '@/services/readingStats'
 
 export function StatsScreen() {
   const navigate = useNavigate()
   const [stats, setStats] = useState<ReadingStats | null>(null)
   const [finished, setFinished] = useState(0)
+  const [wpm, setWpm] = useState<number | null>(null)
 
   useEffect(() => {
     void Promise.all([sessionRepository.findAll(), bookRepository.findAll()]).then(
       ([sessions, books]) => {
         setStats(computeStats(sessions))
         setFinished(books.filter((b) => b.status === 'finished').length)
+        const wordCounts = new Map(
+          books
+            .filter((b) => b.wordCount != null)
+            .map((b) => [b.id, b.wordCount as number]),
+        )
+        setWpm(computeReadingSpeed(sessions, wordCounts).wpm)
       },
     )
   }, [])
@@ -40,6 +51,7 @@ export function StatsScreen() {
               <Stat label="Day streak" value={`${stats.currentStreak}`} />
               <Stat label="Sessions" value={`${stats.sessionCount}`} />
               <Stat label="Finished" value={`${finished}`} />
+              <Stat label="Reading speed" value={wpm != null ? `${wpm} wpm` : '—'} />
             </div>
 
             <section className="settings-section" style={{ marginTop: 24 }}>

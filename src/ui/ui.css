@@ -407,6 +407,73 @@
   color: var(--color-danger);
 }
 
+/* Recent-positions menu shown on the first back press in the reader. The
+   backdrop starts below the appbar so a second back press still reaches the
+   back button (and exits). */
+.recent-positions-backdrop {
+  position: fixed;
+  top: var(--appbar-height, 60px);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.2);
+}
+.recent-positions-menu {
+  position: absolute;
+  top: 4px;
+  left: 12px;
+  width: min(280px, calc(100vw - 24px));
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  padding: 4px;
+  max-height: 60vh;
+  overflow: auto;
+}
+.recent-positions-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  padding: 8px 10px 4px;
+}
+.recent-positions-exit {
+  border-top: 1px solid var(--color-border);
+  color: var(--color-danger);
+}
+
+/* Book details page */
+.book-details-header {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.book-details-cover {
+  width: 96px;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  font-size: 11px;
+  overflow: hidden;
+}
+.book-details-title {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+.book-details-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 14px;
+}
+.book-details-row:last-child {
+  border-bottom: none;
+}
+
 /* Annotations + stats */
 .annotation-card {
   padding: 12px;

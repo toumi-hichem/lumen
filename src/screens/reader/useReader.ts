@@ -28,6 +28,19 @@ import { useSettingsStore } from '@/store/settingsStore'
 
 type ReaderStatus = 'loading' | 'ready' | 'error'
 
+/** A position the user jumped away from (seek, TOC jump, fast page flips). */
+export interface JumpEntry {
+  cfi: string
+  progress: number
+  chapterTitle?: string
+  at: number
+}
+
+/** Page turns within this window count as one "burst" of fast flipping. */
+const BURST_WINDOW_MS = 2500
+/** Turns in one burst before the burst start is recorded as a jump origin. */
+const BURST_THRESHOLD = 5
+
 export interface ReaderApi {
   status: ReaderStatus
   error?: string
@@ -53,8 +66,20 @@ export interface ReaderApi {
   getSpeakableChunks: (maxChars?: number) => Promise<SpeakableChunk[]>
   /** Jump to a fraction (0..1) through the book. */
   goToPercentage: (p: number) => void
-  /** Full-text search across the book. */
-  search: (query: string) => Promise<SearchHit[]>
+  /** Jump to a fraction (0..1) within the current chapter (falls back to the
+   *  whole book for engines without chapter structure). */
+  goToChapterPercentage: (p: number) => void
+  /** Full-text search across the book; `onProgress` streams partial results. */
+  search: (
+    query: string,
+    onProgress?: (hits: SearchHit[], fraction: number) => void,
+  ) => Promise<SearchHit[]>
+  /** First speakable chunk on the current page (after getSpeakableChunks). */
+  currentChunkIndex: () => number
+  /** Chunk containing an anchor such as a selection's CFI range. */
+  chunkIndexForAnchor: (anchor: string) => number | null
+  /** Positions the user recently jumped away from, newest first. */
+  jumpHistory: JumpEntry[]
   /** Highlight + scroll to a spoken chunk (read-along). */
   locateChunk: (chunk: SpeakableChunk) => void
   /** Remove the read-along highlight. */
@@ -83,6 +108,7 @@ export function useReader(bookId: string, onTap?: () => void): ReaderApi {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
   const [highlights, setHighlights] = useState<Highlight[]>([])
   const [selection, setSelection] = useState<SelectionInfo>()
+  const [jumpHistory, setJumpHistory] = useState<JumpEntry[]>([])
 
   const engineRef = useRef<BookEngine | null>(null)
   const containerEl = useRef<HTMLDivElement | null>(null)
@@ -90,6 +116,17 @@ export function useReader(bookId: string, onTap?: () => void): ReaderApi {
   const sessionStart = useRef(0)
   const sessionBookId = useRef('')
   const markedFinished = useRef(false)
+  // Progress at the start of the current session span and right now, used to
+  // derive reading speed (words/minute) from flushed sessions.
+  const sessionStartProgress = useRef<number | undefined>(undefined)
+  const latestProgress = useRef<number | undefined>(undefined)
+  // Fast page-flip burst tracking for the jump history.
+  const burst = useRef<{ startedAt: number; count: number; origin: JumpEntry | null; pushed: boolean }>({
+    startedAt: 0,
+    count: 0,
+    origin: null,
+    pushed: false,
+  })
 
   // Callback ref so we know exactly when the viewport node is in the DOM.
   const containerRef = useCallback((node: HTMLDivElement | null) => {
@@ -110,6 +147,9 @@ export function useReader(bookId: string, onTap?: () => void): ReaderApi {
       if (!sessionBookId.current || !start) return
       const now = Date.now()
       sessionStart.current = now
+      const startProgress = sessionStartProgress.current
+      const endProgress = latestProgress.current
+      sessionStartProgress.current = latestProgress.current
       const elapsed = now - start
       if (elapsed > 10_000) {
         void sessionRepository.add({
@@ -118,6 +158,8 @@ export function useReader(bookId: string, onTap?: () => void): ReaderApi {
           startedAt: start,
           endedAt: now,
           durationMs: elapsed,
+          startProgress,
+          endProgress,
         })
       }
     }
@@ -127,7 +169,10 @@ export function useReader(bookId: string, onTap?: () => void): ReaderApi {
     // time spent hidden is not counted as reading.
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') flushSession()
-      else if (sessionStart.current) sessionStart.current = Date.now()
+      else if (sessionStart.current) {
+        sessionStart.current = Date.now()
+        sessionStartProgress.current = latestProgress.current
+      }
     }
     document.addEventListener('visibilitychange', onVisibilityChange)
     window.addEventListener('pagehide', flushSession)
@@ -155,10 +200,14 @@ export function useReader(bookId: string, onTap?: () => void): ReaderApi {
         engine.applyTheme(buildReaderTheme(theme, font, reading))
 
         engine.onLocationChange((loc) => {
+          latestProgress.current = loc.progress
+          if (sessionStartProgress.current === undefined) {
+            sessionStartProgress.current = loc.progress
+          }
           setLocation(loc)
           scheduleSave(loaded.id, loc)
         })
-        engine.onSelection((sel) => setSelection(sel))
+        engine.onSelection((sel) => setSelection(sel ?? undefined))
         engine.onTap?.(() => onTapRef.current?.())
 
         const [savedToc, savedProgress, savedBookmarks, savedHighlights] =
@@ -171,8 +220,23 @@ export function useReader(bookId: string, onTap?: () => void): ReaderApi {
 
         await engine.display(savedProgress?.location.cfi)
         // Re-apply persisted highlights onto the freshly rendered content.
+        // Tapping a drawn range re-selects the whole of it.
         for (const hl of savedHighlights) {
-          engine.addHighlight(hl.cfiRange, hl.color, theme.tokens.highlight[hl.color])
+          engine.addHighlight(
+            hl.cfiRange,
+            hl.color,
+            theme.tokens.highlight[hl.color],
+            () => engine.selectAnnotation?.(hl.cfiRange),
+          )
+        }
+        // Bookmarks made from a selection are drawn as highlights too.
+        for (const bm of savedBookmarks) {
+          const range = bm.cfiRange
+          if (range) {
+            engine.addHighlight(range, 'blue', theme.tokens.highlight.blue, () =>
+              engine.selectAnnotation?.(range),
+            )
+          }
         }
 
         if (!active) return engine.destroy()
@@ -254,10 +318,65 @@ export function useReader(bookId: string, onTap?: () => void): ReaderApi {
     }
   }
 
-  const next = () => void engineRef.current?.next()
-  const prev = () => void engineRef.current?.prev()
-  const goTo = (target: string) => void engineRef.current?.display(target)
-  const clearSelection = () => setSelection(undefined)
+  /** Record the current position as a jump origin (deduped, newest first). */
+  const pushJump = useCallback(() => {
+    const loc = engineRef.current?.getLocation()
+    if (!loc?.cfi) return
+    const entry: JumpEntry = {
+      cfi: loc.cfi,
+      progress: loc.progress,
+      chapterTitle: loc.chapterTitle,
+      at: Date.now(),
+    }
+    setJumpHistory((prev) =>
+      [entry, ...prev.filter((e) => e.cfi !== entry.cfi)].slice(0, 6),
+    )
+  }, [])
+
+  // Flipping many pages in quick succession is treated like a jump: remember
+  // where the burst started so an accidental fast-flip can be undone.
+  const trackTurn = () => {
+    const loc = engineRef.current?.getLocation()
+    const now = Date.now()
+    const b = burst.current
+    if (now - b.startedAt > BURST_WINDOW_MS) {
+      burst.current = {
+        startedAt: now,
+        count: 1,
+        origin: loc?.cfi
+          ? { cfi: loc.cfi, progress: loc.progress, chapterTitle: loc.chapterTitle, at: now }
+          : null,
+        pushed: false,
+      }
+      return
+    }
+    b.startedAt = now
+    b.count += 1
+    if (b.count >= BURST_THRESHOLD && !b.pushed && b.origin) {
+      b.pushed = true
+      const origin = b.origin
+      setJumpHistory((prev) =>
+        [origin, ...prev.filter((e) => e.cfi !== origin.cfi)].slice(0, 6),
+      )
+    }
+  }
+
+  const next = () => {
+    trackTurn()
+    void engineRef.current?.next()
+  }
+  const prev = () => {
+    trackTurn()
+    void engineRef.current?.prev()
+  }
+  const goTo = (target: string) => {
+    pushJump()
+    void engineRef.current?.display(target)
+  }
+  const clearSelection = useCallback(() => {
+    engineRef.current?.clearNativeSelection?.()
+    setSelection(undefined)
+  }, [])
   const getSectionText = () =>
     engineRef.current?.getCurrentSectionText() ?? Promise.resolve([])
   const getSpeakableChunks = useCallback(
@@ -266,11 +385,36 @@ export function useReader(bookId: string, onTap?: () => void): ReaderApi {
     [],
   )
   const goToPercentage = useCallback(
-    (p: number) => void engineRef.current?.goToPercentage(p),
-    [],
+    (p: number) => {
+      pushJump()
+      void engineRef.current?.goToPercentage(p)
+    },
+    [pushJump],
+  )
+  const goToChapterPercentage = useCallback(
+    (p: number) => {
+      pushJump()
+      const engine = engineRef.current
+      if (!engine) return
+      void (engine.goToChapterPercentage ?? engine.goToPercentage).call(engine, p)
+    },
+    [pushJump],
   )
   const search = useCallback(
-    (query: string) => engineRef.current?.search(query) ?? Promise.resolve([]),
+    (
+      query: string,
+      onProgress?: (hits: SearchHit[], fraction: number) => void,
+    ) =>
+      engineRef.current?.search(query, undefined, onProgress) ??
+      Promise.resolve([]),
+    [],
+  )
+  const currentChunkIndex = useCallback(
+    () => engineRef.current?.currentChunkIndex?.() ?? 0,
+    [],
+  )
+  const chunkIndexForAnchor = useCallback(
+    (anchor: string) => engineRef.current?.chunkIndexForAnchor?.(anchor) ?? null,
     [],
   )
   const locateChunk = useCallback(
@@ -292,19 +436,31 @@ export function useReader(bookId: string, onTap?: () => void): ReaderApi {
 
   const addBookmark = () => {
     if (!book || !location) return
+    // A bookmark made from a selection anchors to the selected range and is
+    // drawn as a highlight so it stays visible in the text.
+    const cfiRange = selection?.cfiRange
     const bookmark: Bookmark = {
       id: createId('bm'),
       bookId: book.id,
-      cfi: location.cfi,
+      cfi: cfiRange ?? location.cfi,
+      cfiRange,
       label: location.chapterTitle ?? `${Math.round(location.progress * 100)}%`,
       excerpt: selection?.text,
       createdAt: Date.now(),
     }
     void bookmarkRepository.save(bookmark)
+    if (cfiRange) {
+      const engine = engineRef.current
+      engine?.addHighlight(cfiRange, 'blue', theme.tokens.highlight.blue, () =>
+        engine?.selectAnnotation?.(cfiRange),
+      )
+    }
     setBookmarks((prev) => [...prev, bookmark])
   }
 
   const removeBookmark = (id: string) => {
+    const target = bookmarks.find((b) => b.id === id)
+    if (target?.cfiRange) engineRef.current?.removeHighlight(target.cfiRange)
     void bookmarkRepository.delete(id)
     setBookmarks((prev) => prev.filter((b) => b.id !== id))
   }
@@ -320,10 +476,12 @@ export function useReader(bookId: string, onTap?: () => void): ReaderApi {
       createdAt: Date.now(),
     }
     void highlightRepository.save(highlight)
-    engineRef.current?.addHighlight(
+    const engine = engineRef.current
+    engine?.addHighlight(
       highlight.cfiRange,
       color,
       theme.tokens.highlight[color],
+      () => engine?.selectAnnotation?.(highlight.cfiRange),
     )
     setHighlights((prev) => [...prev, highlight])
     clearSelection()
@@ -366,7 +524,11 @@ export function useReader(bookId: string, onTap?: () => void): ReaderApi {
     getSectionText,
     getSpeakableChunks,
     goToPercentage,
+    goToChapterPercentage,
     search,
+    currentChunkIndex,
+    chunkIndexForAnchor,
+    jumpHistory,
     locateChunk,
     clearSpokenHighlight,
     chunkAtPoint,

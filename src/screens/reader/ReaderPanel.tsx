@@ -12,7 +12,10 @@ interface ReaderPanelProps {
   bookmarks: Bookmark[]
   highlights: Highlight[]
   onNavigate: (target: string) => void
-  onSearch: (query: string) => Promise<SearchHit[]>
+  onSearch: (
+    query: string,
+    onProgress?: (hits: SearchHit[], fraction: number) => void,
+  ) => Promise<SearchHit[]>
   onRemoveBookmark: (id: string) => void
   onRemoveHighlight: (id: string) => void
   onEditHighlightNote: (id: string, note: string) => void
@@ -36,12 +39,23 @@ export function ReaderPanel({
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchHit[]>([])
   const [searching, setSearching] = useState(false)
+  const [searchProgress, setSearchProgress] = useState(0)
 
   const runSearch = async () => {
     if (query.trim().length < 2) return
     setSearching(true)
-    setResults(await onSearch(query))
-    setSearching(false)
+    setSearchProgress(0)
+    setResults([])
+    try {
+      // Results stream in per chapter so long books show hits immediately.
+      const hits = await onSearch(query, (partial, fraction) => {
+        setResults(partial)
+        setSearchProgress(fraction)
+      })
+      setResults(hits)
+    } finally {
+      setSearching(false)
+    }
   }
 
   return (
@@ -186,23 +200,26 @@ export function ReaderPanel({
                   Go
                 </button>
               </div>
-              {searching && <p className="muted" style={{ padding: 8 }}>Searching…</p>}
-              {!searching &&
-                results.map((hit, i) => (
-                  <button
-                    key={`${hit.anchor}-${i}`}
-                    className="list-item"
-                    onClick={() => {
-                      onNavigate(hit.anchor)
-                      onClose()
-                    }}
-                  >
-                    {hit.chapterTitle && (
-                      <div><small>{hit.chapterTitle}</small></div>
-                    )}
-                    {hit.excerpt}
-                  </button>
-                ))}
+              {searching && (
+                <p className="muted" style={{ padding: 8 }}>
+                  Searching… {Math.round(searchProgress * 100)}%
+                </p>
+              )}
+              {results.map((hit, i) => (
+                <button
+                  key={`${hit.anchor}-${i}`}
+                  className="list-item"
+                  onClick={() => {
+                    onNavigate(hit.anchor)
+                    onClose()
+                  }}
+                >
+                  {hit.chapterTitle && (
+                    <div><small>{hit.chapterTitle}</small></div>
+                  )}
+                  {hit.excerpt}
+                </button>
+              ))}
               {!searching && query.length >= 2 && results.length === 0 && (
                 <p className="muted" style={{ padding: 8 }}>No matches.</p>
               )}

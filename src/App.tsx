@@ -7,6 +7,7 @@ import { LibraryScreen } from '@/screens/LibraryScreen'
 import { ReaderScreen } from '@/screens/ReaderScreen'
 import { SettingsScreen } from '@/screens/SettingsScreen'
 import { AnnotationsScreen } from '@/screens/AnnotationsScreen'
+import { BookDetailsScreen } from '@/screens/BookDetailsScreen'
 import { BookmarksScreen } from '@/screens/BookmarksScreen'
 import { StatsScreen } from '@/screens/StatsScreen'
 
@@ -28,6 +29,7 @@ export function App() {
       <Route path="/" element={<HomeScreen />} />
       <Route path="/library" element={<LibraryScreen />} />
       <Route path="/read/:bookId" element={<ReaderScreen />} />
+      <Route path="/book/:bookId" element={<BookDetailsScreen />} />
       <Route path="/settings" element={<SettingsScreen />} />
       <Route path="/highlights" element={<AnnotationsScreen />} />
       <Route path="/bookmarks" element={<BookmarksScreen />} />

@@ -33,7 +33,7 @@ export class TextEngine implements BookEngine {
   private content: HTMLElement | null = null
   private location: BookLocationInfo | null = null
   private locationCb: ((loc: BookLocationInfo) => void) | null = null
-  private selectionCb: ((sel: SelectionInfo) => void) | null = null
+  private selectionCb: ((sel: SelectionInfo | null) => void) | null = null
   private tapCb: (() => void) | null = null
   private readonly highlights = new Map<string, HighlightColor>()
   private theme: ReaderTheme | null = null
@@ -204,8 +204,12 @@ export class TextEngine implements BookEngine {
     this.locationCb = cb
   }
 
-  onSelection(cb: (sel: SelectionInfo) => void): void {
+  onSelection(cb: (sel: SelectionInfo | null) => void): void {
     this.selectionCb = cb
+  }
+
+  clearNativeSelection(): void {
+    window.getSelection()?.removeAllRanges()
   }
 
   onTap(cb: () => void): void {

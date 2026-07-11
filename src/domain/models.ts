@@ -21,6 +21,8 @@ export interface Book {
   readonly status?: BookStatus
   readonly tags?: readonly string[]
   readonly collectionIds?: readonly string[]
+  /** Total words in the book. Computed lazily (first details view) and cached. */
+  readonly wordCount?: number
 }
 
 /** A user-defined shelf/collection grouping books. */
@@ -46,6 +48,10 @@ export interface ReadingSession {
   readonly endedAt: number
   /** Milliseconds of active reading. */
   readonly durationMs: number
+  /** Book progress (0..1) when the session span started/ended. Present on
+   *  sessions recorded since reading-speed tracking; used to derive WPM. */
+  readonly startProgress?: number
+  readonly endProgress?: number
 }
 
 /**
@@ -69,6 +75,9 @@ export interface Bookmark {
   readonly id: string
   readonly bookId: string
   readonly cfi: string
+  /** Range CFI when the bookmark was made from a text selection; the range is
+   *  drawn as a highlight overlay in the reader. */
+  readonly cfiRange?: string
   readonly label: string
   readonly excerpt?: string
   readonly createdAt: number

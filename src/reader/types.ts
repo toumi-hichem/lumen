@@ -4,6 +4,9 @@ export interface BookLocationInfo {
   cfi: string
   /** 0..1 fraction through the whole book. */
   progress: number
+  /** 0..1 fraction through the current chapter/section, when the engine can
+   *  compute it. UI falls back to `progress` when absent. */
+  chapterProgress?: number
   chapterTitle?: string
 }
 
@@ -102,18 +105,37 @@ export interface BookEngine {
   prev(): Promise<void>
   /** Jump to a fraction (0..1) through the whole book. */
   goToPercentage(percentage: number): Promise<void>
+  /** Jump to a fraction (0..1) within the CURRENT chapter/section. Optional:
+   *  engines without section structure fall back to goToPercentage. */
+  goToChapterPercentage?(percentage: number): Promise<void>
 
   /** Set layout mode. Takes effect on the next render for some engines. */
   setFlow(flow: 'paginated' | 'scrolled'): void
 
-  /** Full-text search across the book. Capped at `limit` hits. */
-  search(query: string, limit?: number): Promise<SearchHit[]>
+  /**
+   * Full-text search across the book. Capped at `limit` hits. `onProgress`
+   * (when supported) streams partial hits and a 0..1 completion fraction so
+   * the UI can render results before the whole book has been scanned. A new
+   * search() call supersedes (cancels) a running one.
+   */
+  search(
+    query: string,
+    limit?: number,
+    onProgress?: (hits: SearchHit[], fraction: number) => void,
+  ): Promise<SearchHit[]>
 
   applyTheme(theme: ReaderTheme): void
 
   getLocation(): BookLocationInfo | null
   onLocationChange(cb: (loc: BookLocationInfo) => void): void
-  onSelection(cb: (sel: SelectionInfo) => void): void
+  /** Live selection reports. `null` means the selection was cleared (the user
+   *  tapped away / collapsed it) so the UI can hide its selection menu. */
+  onSelection(cb: (sel: SelectionInfo | null) => void): void
+  /** Clear any native text selection inside the rendered content. Optional. */
+  clearNativeSelection?(): void
+  /** Programmatically select a stored annotation range (tap on a highlight →
+   *  the whole range becomes the active selection). Optional. */
+  selectAnnotation?(cfiRange: string): void
   /** A tap inside the content that is not a text selection or link. Used to
    *  toggle the reader chrome in continuous mode where there are no tap-zone
    *  overlays. Optional: engines without a tappable surface omit it. */
@@ -153,6 +175,15 @@ export interface BookEngine {
    * coordinates are relative to the reader container. Returns null if none.
    */
   chunkAtPoint(x: number, y: number): SpeakableChunk | null
+
+  /** Index of the first speakable chunk visible on the current page/viewport.
+   *  Requires getSpeakableChunks() to have run for the current section.
+   *  Optional; callers fall back to 0. */
+  currentChunkIndex?(): number
+
+  /** Index of the speakable chunk containing an anchor (e.g. a selection's
+   *  CFI range). Requires getSpeakableChunks() to have run. Optional. */
+  chunkIndexForAnchor?(anchor: string): number | null
 
   /** Scroll continuous content by a pixel delta (auto-scroll). Optional: only
    *  engines with a scrollable viewport (text/MOBI) implement it. */

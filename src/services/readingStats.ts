@@ -1,5 +1,49 @@
 import type { ReadingSession } from '@/domain/models'
 
+/** Fallback words-per-minute when there is not enough data to measure. */
+export const DEFAULT_WPM = 220
+
+export interface ReadingSpeed {
+  /** Measured words per minute, or null when the sample is too small. */
+  wpm: number | null
+  wordsRead: number
+  minutes: number
+}
+
+/**
+ * Derive the user's reading speed from sessions that recorded start/end
+ * progress, joined with the books' cached word counts. Sessions without
+ * forward progress (e.g. TTS listening while paused on a page) contribute
+ * nothing and are skipped.
+ */
+export function computeReadingSpeed(
+  sessions: ReadingSession[],
+  wordCountByBook: Map<string, number>,
+): ReadingSpeed {
+  let words = 0
+  let ms = 0
+  for (const s of sessions) {
+    const wordCount = wordCountByBook.get(s.bookId)
+    if (
+      !wordCount ||
+      s.startProgress === undefined ||
+      s.endProgress === undefined
+    ) {
+      continue
+    }
+    const delta = s.endProgress - s.startProgress
+    if (delta <= 0) continue
+    words += delta * wordCount
+    ms += s.durationMs
+  }
+  const minutes = ms / 60_000
+  // Require a meaningful sample before reporting a number.
+  if (minutes < 5 || words < 200) {
+    return { wpm: null, wordsRead: Math.round(words), minutes }
+  }
+  return { wpm: Math.round(words / minutes), wordsRead: Math.round(words), minutes }
+}
+
 export interface DailyTotal {
   /** YYYY-MM-DD local date. */
   date: string

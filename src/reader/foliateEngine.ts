@@ -24,6 +24,8 @@ interface ChunkSpan {
   /** Global character offsets within the section, for tap-to-start mapping. */
   start: number
   end: number
+  /** Owning content document; offsets are only comparable within one doc. */
+  doc: Document
 }
 
 interface HighlightEntry {
@@ -49,7 +51,7 @@ export class FoliateEngine implements BookEngine {
   private location: BookLocationInfo | null = null
   private tocItems: TocItem[] = []
   private locationCb: ((loc: BookLocationInfo) => void) | null = null
-  private selectionCb: ((sel: SelectionInfo) => void) | null = null
+  private selectionCb: ((sel: SelectionInfo | null) => void) | null = null
   private tapCb: (() => void) | null = null
   private lastTheme: ReaderTheme | null = null
   private flow: 'paginated' | 'scrolled' = 'paginated'
@@ -57,8 +59,15 @@ export class FoliateEngine implements BookEngine {
   private readonly highlights = new Map<string, HighlightEntry>()
   private readalongValue: string | null = null
   private readalongColor = 'rgba(255, 213, 0, 0.4)'
-  /** Suppresses the tap callback for the click that ends a text selection. */
-  private selectionJustEnded = false
+  /** Visible range of the current page, from the last relocate event. */
+  private lastRange: Range | null = null
+  private lastSectionIndex = 0
+  /** Taps are suppressed while a selection is active or was just cleared, so
+   *  dismissing a selection never also toggles the reader chrome. */
+  private suppressTapUntil = 0
+  private pendingTap: ReturnType<typeof setTimeout> | undefined
+  /** Bumped per search() call; a stale generation aborts its scan loop. */
+  private searchGeneration = 0
 
   constructor(format: BookFormat = 'epub') {
     this.format = format
@@ -83,9 +92,13 @@ export class FoliateEngine implements BookEngine {
 
     view.addEventListener('relocate', ((e: CustomEvent<FoliateLocation>) => {
       const detail = e.detail
+      this.lastRange = detail.range ?? null
+      this.lastSectionIndex = detail.section?.current ?? this.lastSectionIndex
+      const progress = detail.fraction ?? 0
       this.location = {
         cfi: detail.cfi ?? '',
-        progress: detail.fraction ?? 0,
+        progress,
+        chapterProgress: this.chapterFraction(progress),
         chapterTitle: detail.tocItem?.label?.trim() || undefined,
       }
       // Chunk anchors are section-relative; invalidate on navigation.
@@ -141,25 +154,62 @@ export class FoliateEngine implements BookEngine {
     await this.view?.goToFraction(Math.max(0, Math.min(1, percentage)))
   }
 
+  async goToChapterPercentage(percentage: number): Promise<void> {
+    const view = this.view
+    if (!view) return
+    const fractions = view.getSectionFractions()
+    const lo = fractions[this.lastSectionIndex]
+    const hi = fractions[this.lastSectionIndex + 1] ?? 1
+    if (lo == null || hi <= lo) return this.goToPercentage(percentage)
+    const p = Math.max(0, Math.min(1, percentage))
+    // Stay strictly inside the section: exactly `hi` is the next chapter.
+    await view.goToFraction(Math.min(lo + p * (hi - lo), hi - 1e-6))
+  }
+
   setFlow(flow: 'paginated' | 'scrolled'): void {
     this.flow = flow
     this.configureRenderer()
   }
 
-  async search(query: string, limit = 60): Promise<SearchHit[]> {
+  async search(
+    query: string,
+    limit = 60,
+    onProgress?: (hits: SearchHit[], fraction: number) => void,
+  ): Promise<SearchHit[]> {
     const term = query.trim()
     if (!this.view || term.length < 2) return []
+    const generation = ++this.searchGeneration
     const hits: SearchHit[] = []
-    for await (const result of this.view.search({ query: term })) {
-      if (typeof result === 'object' && 'subitems' in result) {
-        for (const item of result.subitems) {
-          hits.push({ anchor: item.cfi, excerpt: item.excerpt.trim() })
-          if (hits.length >= limit) break
+    // matchDiacritics routes foliate's matcher to its fast indexOf-based
+    // search (still case-insensitive). The default path segments every
+    // grapheme of the book with Intl.Segmenter and is unusably slow.
+    const iter = this.view.search({ query: term, matchDiacritics: true })
+    let fraction = 0
+    try {
+      for await (const result of iter) {
+        // A newer search superseded this one; stop scanning.
+        if (generation !== this.searchGeneration) return hits
+        if (typeof result === 'object' && 'subitems' in result) {
+          const chapterTitle = result.label?.trim() || undefined
+          for (const item of result.subitems) {
+            const { pre, match, post } = item.excerpt
+            hits.push({
+              anchor: item.cfi,
+              excerpt: `${pre}${match}${post}`.trim(),
+              chapterTitle,
+            })
+            if (hits.length >= limit) break
+          }
+          onProgress?.(hits.slice(), fraction)
+        } else if (typeof result === 'object' && 'progress' in result) {
+          fraction = result.progress
+          onProgress?.(hits.slice(), fraction)
         }
+        if (hits.length >= limit) break
       }
-      if (hits.length >= limit) break
+    } finally {
+      if (generation === this.searchGeneration) this.view.clearSearch()
     }
-    this.view.clearSearch()
     return hits
   }
 
@@ -184,12 +234,43 @@ export class FoliateEngine implements BookEngine {
     this.locationCb = cb
   }
 
-  onSelection(cb: (sel: SelectionInfo) => void): void {
+  onSelection(cb: (sel: SelectionInfo | null) => void): void {
     this.selectionCb = cb
   }
 
   onTap(cb: () => void): void {
     this.tapCb = cb
+  }
+
+  clearNativeSelection(): void {
+    try {
+      this.view?.deselect()
+    } catch {
+      /* no selection */
+    }
+    for (const content of this.contents()) {
+      content.doc.getSelection()?.removeAllRanges()
+    }
+  }
+
+  selectAnnotation(cfiRange: string): void {
+    if (!this.view) return
+    try {
+      const resolved = this.view.resolveNavigation(cfiRange)
+      if (!resolved?.anchor) return
+      const content = this.contents().find((c) => c.index === resolved.index)
+      if (!content) return
+      const range = anchorToRange(resolved.anchor(content.doc), content.doc)
+      const sel = content.doc.getSelection()
+      if (!range || !sel) return
+      // Selecting a highlight must not read as a page tap.
+      this.suppressTapUntil = Date.now() + 400
+      sel.removeAllRanges()
+      sel.addRange(range)
+      // The selectionchange listener reports it, which opens the menu.
+    } catch {
+      /* stale annotation range */
+    }
   }
 
   addHighlight(
@@ -246,6 +327,7 @@ export class FoliateEngine implements BookEngine {
           chunk,
           start: locationToOffset(entries, dc.startNode, dc.startOffset),
           end: locationToOffset(entries, dc.endNode, dc.endOffset),
+          doc: content.doc,
         })
         index += 1
       }
@@ -311,10 +393,44 @@ export class FoliateEngine implements BookEngine {
     if (!caret) return null
     const entries = collectTextNodes(content.doc.body)
     const pos = locationToOffset(entries, caret.startContainer, caret.startOffset)
-    return this.spans.find((s) => pos >= s.start && pos < s.end)?.chunk ?? null
+    return (
+      this.spans.find(
+        (s) => s.doc === content.doc && pos >= s.start && pos < s.end,
+      )?.chunk ?? null
+    )
+  }
+
+  currentChunkIndex(): number {
+    const range = this.lastRange
+    if (!range || !this.spans.length) return 0
+    const doc = range.startContainer.ownerDocument
+    if (!doc?.body) return 0
+    const pos = rangeStartOffset(doc, range)
+    return this.spans.find((s) => s.doc === doc && s.end > pos)?.chunk.index ?? 0
+  }
+
+  chunkIndexForAnchor(anchor: string): number | null {
+    if (!this.view || !this.spans.length) return null
+    try {
+      const resolved = this.view.resolveNavigation(anchor)
+      if (!resolved?.anchor) return null
+      const content = this.contents().find((c) => c.index === resolved.index)
+      if (!content?.doc.body) return null
+      const range = anchorToRange(resolved.anchor(content.doc), content.doc)
+      if (!range) return null
+      const pos = rangeStartOffset(content.doc, range)
+      const span =
+        this.spans.find(
+          (s) => s.doc === content.doc && pos >= s.start && pos < s.end,
+        ) ?? this.spans.find((s) => s.doc === content.doc && s.end > pos)
+      return span?.chunk.index ?? null
+    } catch {
+      return null
+    }
   }
 
   destroy(): void {
+    clearTimeout(this.pendingTap)
     this.view?.close()
     this.view?.remove()
     this.view = null
@@ -325,6 +441,15 @@ export class FoliateEngine implements BookEngine {
   }
 
   // --- internals ---
+
+  /** Map a whole-book fraction to a fraction within the current section. */
+  private chapterFraction(bookFraction: number): number | undefined {
+    const fractions = this.view?.getSectionFractions() ?? []
+    const lo = fractions[this.lastSectionIndex]
+    const hi = fractions[this.lastSectionIndex + 1] ?? 1
+    if (lo == null || hi <= lo) return undefined
+    return Math.max(0, Math.min(1, (bookFraction - lo) / (hi - lo)))
+  }
 
   private configureRenderer(): void {
     const renderer = this.view?.renderer
@@ -352,11 +477,24 @@ export class FoliateEngine implements BookEngine {
     // book frame so only Lumen's selection menu appears.
     doc.addEventListener('contextmenu', (e) => e.preventDefault())
 
+    // Report the selection live from selectionchange (debounced), so the menu
+    // appears while the long-press is still held and follows the handles as
+    // the selection is expanded — not only after a follow-up tap.
+    let debounce: ReturnType<typeof setTimeout> | undefined
+    let hadSelection = false
+
     const reportSelection = () => {
       const sel = doc.getSelection()
       const text = sel?.toString() ?? ''
-      if (!sel || sel.rangeCount === 0 || !text.trim()) return
-      this.selectionJustEnded = true
+      if (!sel || sel.rangeCount === 0 || sel.isCollapsed || !text.trim()) {
+        if (hadSelection) {
+          hadSelection = false
+          // The tap that collapsed the selection is a dismiss, not a page tap.
+          this.suppressTapUntil = Date.now() + 400
+          this.selectionCb?.(null)
+        }
+        return
+      }
       const range = sel.getRangeAt(0)
       let cfiRange: string
       try {
@@ -365,6 +503,8 @@ export class FoliateEngine implements BookEngine {
         return
       }
       if (!cfiRange) return
+      hadSelection = true
+      this.suppressTapUntil = Date.now() + 400
       const r = range.getBoundingClientRect()
       const frame = doc.defaultView?.frameElement?.getBoundingClientRect()
       const ox = frame?.left ?? 0
@@ -382,22 +522,29 @@ export class FoliateEngine implements BookEngine {
         },
       })
     }
-    doc.addEventListener('mouseup', reportSelection)
-    doc.addEventListener('touchend', reportSelection)
+
+    doc.addEventListener('selectionchange', () => {
+      clearTimeout(debounce)
+      debounce = setTimeout(reportSelection, 120)
+    })
 
     // Tap inside the book toggles the reader chrome (there are tap-zone
-    // overlays only in paginated mode). Ignore taps that end a selection and
-    // taps on links (foliate handles link navigation itself).
+    // overlays only in paginated mode). Ignore taps on links (foliate handles
+    // link navigation itself) and anything selection-related. The toggle is
+    // deferred slightly so a click that lands on a highlight — which
+    // programmatically re-selects it — or one that collapses a selection
+    // (selectionchange arrives after the click) never also fires it.
     doc.addEventListener('click', (e) => {
-      if (this.selectionJustEnded) {
-        this.selectionJustEnded = false
-        return
-      }
+      if (Date.now() < this.suppressTapUntil) return
       const sel = doc.getSelection()
       if (sel && !sel.isCollapsed) return
       const target = e.target as Element | null
       if (target?.closest?.('a[href]')) return
-      this.tapCb?.()
+      clearTimeout(this.pendingTap)
+      this.pendingTap = setTimeout(() => {
+        if (Date.now() < this.suppressTapUntil) return
+        this.tapCb?.()
+      }, 180)
     })
   }
 
@@ -422,6 +569,40 @@ export class FoliateEngine implements BookEngine {
     }
     return all[0] ?? null
   }
+}
+
+/**
+ * Normalize a resolved navigation anchor (Range or Element) to a Range.
+ * `instanceof Range` is unreliable across the iframe realm boundary, so the
+ * check is structural.
+ */
+function anchorToRange(target: Range | Element | null, doc: Document): Range | null {
+  if (!target) return null
+  if ('startContainer' in target) return target
+  const range = doc.createRange()
+  range.selectNodeContents(target)
+  return range
+}
+
+/**
+ * Global character offset (across the section's text nodes) of a range's
+ * start. Falls back to the first text node at/after the range start when the
+ * start container is not itself a text node.
+ */
+function rangeStartOffset(doc: Document, range: Range): number {
+  const entries = collectTextNodes(doc.body)
+  const node = range.startContainer
+  if (node.nodeType === Node.TEXT_NODE) {
+    return locationToOffset(entries, node, range.startOffset)
+  }
+  for (const entry of entries) {
+    try {
+      if (range.comparePoint(entry.node, 0) >= 0) return entry.start
+    } catch {
+      /* node outside comparable tree */
+    }
+  }
+  return 0
 }
 
 function buildCss(theme: ReaderTheme): string {

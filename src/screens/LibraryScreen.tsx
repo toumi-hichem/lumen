@@ -206,6 +206,7 @@ export function LibraryScreen() {
                       collections={collections}
                       compact
                       onOpen={() => navigate(`/read/${book.id}`)}
+                      onDetails={() => navigate(`/book/${book.id}`)}
                       onSetStatus={(s) => void setStatus(book.id, s)}
                       onToggleShelf={(c) => void toggleBookInCollection(book.id, c)}
                       onDelete={() => void confirmDelete(book, remove)}
@@ -223,6 +224,7 @@ export function LibraryScreen() {
                   book={book}
                   collections={collections}
                   onOpen={() => navigate(`/read/${book.id}`)}
+                  onDetails={() => navigate(`/book/${book.id}`)}
                   onSetStatus={(s) => void setStatus(book.id, s)}
                   onToggleShelf={(c) => void toggleBookInCollection(book.id, c)}
                   onDelete={() => void confirmDelete(book, remove)}
@@ -245,6 +247,7 @@ interface BookCardProps {
   collections: { id: string; name: string }[]
   compact?: boolean
   onOpen: () => void
+  onDetails: () => void
   onSetStatus: (status: BookStatus) => void
   onToggleShelf: (collectionId: string) => void
   onDelete: () => void
@@ -255,6 +258,7 @@ function BookCard({
   collections,
   compact,
   onOpen,
+  onDetails,
   onSetStatus,
   onToggleShelf,
   onDelete,
@@ -291,6 +295,9 @@ function BookCard({
 
       {menu && !compact && (
         <div className="card-menu">
+          <button className="list-item" onClick={onDetails}>
+            Details
+          </button>
           <div className="card-menu-section">Status</div>
           {(['unread', 'reading', 'finished'] as BookStatus[]).map((s) => (
             <button key={s} className="list-item" onClick={() => onSetStatus(s)}>

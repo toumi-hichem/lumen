@@ -14,6 +14,7 @@ import {
 } from './reader/ReaderActionBar'
 import { ScreenLockOverlay } from './reader/ScreenLockOverlay'
 import { ReaderPanel, type PanelTab } from './reader/ReaderPanel'
+import { RecentPositionsMenu } from './reader/RecentPositionsMenu'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useTheme } from '@/theme/ThemeProvider'
 import { bookSettingsRepository } from '@/storage/bookSettingsRepository'
@@ -37,6 +38,7 @@ export function ReaderScreen() {
   const setReading = useSettingsStore((s) => s.setReading)
   const [panelOpen, setPanelOpen] = useState(false)
   const [panelTab, setPanelTab] = useState<PanelTab>('toc')
+  const [exitMenuOpen, setExitMenuOpen] = useState(false)
   const appbarRef = useRef<HTMLElement>(null)
   const footerRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(false)
@@ -197,32 +199,40 @@ export function ReaderScreen() {
   const startReadAloud = async () => {
     const chunks = await reader.getSpeakableChunks(maxChars)
     if (chunks.length) {
-      tts.start(chunks)
+      // Begin narration at the top of the page being read, not the chapter.
+      tts.start(chunks, reader.currentChunkIndex())
       rememberVoice()
     }
   }
 
   const readFromSelection = async () => {
-    const text = reader.selection?.text
+    const sel = reader.selection
     reader.clearSelection()
     const chunks = await reader.getSpeakableChunks(maxChars)
     if (!chunks.length) return
-    let index = 0
-    if (text) {
-      const needle = text.replace(/\s+/g, ' ').trim().slice(0, 30).toLowerCase()
+    // Resolve the selection's own anchor to a chunk; the fuzzy text match is
+    // only a fallback (it fails on selections spanning block boundaries).
+    let index = sel?.cfiRange ? reader.chunkIndexForAnchor(sel.cfiRange) : null
+    if (index == null && sel?.text) {
+      const needle = sel.text.replace(/\s+/g, ' ').trim().slice(0, 30).toLowerCase()
       const found = chunks.findIndex((c) => c.text.toLowerCase().includes(needle))
       if (found >= 0) index = found
     }
-    tts.start(chunks, index)
+    tts.start(chunks, index ?? 0)
     rememberVoice()
   }
 
   const seek = (event: React.MouseEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
-    reader.goToPercentage((event.clientX - rect.left) / rect.width)
+    reader.goToChapterPercentage((event.clientX - rect.left) / rect.width)
   }
 
   const turn = (dir: 'next' | 'prev') => {
+    // While the selection menu is up, a tap outside it only dismisses it.
+    if (reader.selection) {
+      reader.clearSelection()
+      return
+    }
     void hapticTick()
     if (dir === 'next') reader.next()
     else reader.prev()
@@ -267,13 +277,35 @@ export function ReaderScreen() {
       <header className="appbar" ref={appbarRef}>
         <button
           className="btn btn-icon"
-          onClick={() => navigate(-1)}
+          onClick={() => {
+            // First back press surfaces recent jump origins (accidental seek
+            // / fast-flip recovery); pressing again actually exits.
+            if (exitMenuOpen) {
+              navigate(-1)
+            } else if (reader.jumpHistory.length) {
+              setExitMenuOpen(true)
+            } else {
+              navigate(-1)
+            }
+          }}
           aria-label="Back"
         >
           <Icon path={icons.back} size={18} />
         </button>
         <h1 style={{ fontSize: 15 }}>{reader.book?.title ?? 'Loading…'}</h1>
       </header>
+
+      {exitMenuOpen && (
+        <RecentPositionsMenu
+          entries={reader.jumpHistory}
+          onSelect={(entry) => {
+            setExitMenuOpen(false)
+            reader.goTo(entry.cfi)
+          }}
+          onExit={() => navigate(-1)}
+          onClose={() => setExitMenuOpen(false)}
+        />
+      )}
 
       <div
         className="reader-viewport"
@@ -338,7 +370,10 @@ export function ReaderScreen() {
                 left: reading.largeTapZones ? '30%' : '22%',
                 right: reading.largeTapZones ? '30%' : '22%',
               }}
-              onClick={() => setImmersive((v) => !v)}
+              onClick={() => {
+                if (reader.selection) reader.clearSelection()
+                else setImmersive((v) => !v)
+              }}
               role="button"
               aria-label="Toggle reader menu"
             />
@@ -408,15 +443,22 @@ export function ReaderScreen() {
       )}
 
       <div className="reader-footer" ref={footerRef}>
+        {/* Chapter-scoped: the bar spans the current chapter, not the book. */}
         <div
           className="reader-progress"
           onClick={seek}
           role="slider"
-          aria-label="Reading position"
-          aria-valuenow={Math.round((reader.location?.progress ?? 0) * 100)}
+          aria-label="Position in chapter"
+          aria-valuenow={Math.round(
+            (reader.location?.chapterProgress ?? reader.location?.progress ?? 0) * 100,
+          )}
           tabIndex={0}
         >
-          <span style={{ width: `${(reader.location?.progress ?? 0) * 100}%` }} />
+          <span
+            style={{
+              width: `${(reader.location?.chapterProgress ?? reader.location?.progress ?? 0) * 100}%`,
+            }}
+          />
         </div>
 
         <ReaderActionBar

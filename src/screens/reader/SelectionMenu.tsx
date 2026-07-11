@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { HighlightColor } from '@/domain/models'
 import type { SelectionRect } from '@/reader/types'
 import { useTheme } from '@/theme/ThemeProvider'
@@ -30,6 +30,11 @@ export function SelectionMenu({
   const menuRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<MenuPosition | null>(null)
   const [copied, setCopied] = useState(false)
+  // While the user is still dragging the selection handles, the menu turns
+  // translucent and click-through so it doesn't get in the way of expanding.
+  const [adjusting, setAdjusting] = useState(false)
+  const mounted = useRef(false)
+  const adjustTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   // Measure the rendered menu, then anchor it to the selection within the
   // viewport. Falls back to a fixed top-center position when no rect is known.
@@ -44,6 +49,19 @@ export function SelectionMenu({
       ),
     )
   }, [rect, text])
+
+  // Selection updates after the initial render mean the handles are moving.
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true
+      return
+    }
+    setAdjusting(true)
+    clearTimeout(adjustTimer.current)
+    adjustTimer.current = setTimeout(() => setAdjusting(false), 600)
+  }, [rect, text])
+
+  useEffect(() => () => clearTimeout(adjustTimer.current), [])
 
   const copy = async () => {
     try {
@@ -73,9 +91,13 @@ export function SelectionMenu({
     )
   }
 
-  const style: React.CSSProperties = pos
-    ? { top: pos.top, left: pos.left }
-    : { top: 72, left: '50%', transform: 'translateX(-50%)' }
+  const style: React.CSSProperties = {
+    ...(pos
+      ? { top: pos.top, left: pos.left }
+      : { top: 72, left: '50%', transform: 'translateX(-50%)' }),
+    ...(adjusting ? { opacity: 0.3, pointerEvents: 'none' } : {}),
+    transition: 'opacity 0.15s ease',
+  }
 
   return (
     <div
