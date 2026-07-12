@@ -9,25 +9,7 @@ import {
   TtsNotAvailableError,
 } from './types'
 import { hasNativeSupertonic, SupertonicNative } from './supertonic/nativeBridge'
-
-const PRESET_VOICES: TtsVoice[] = [
-  ...['M1', 'M2', 'M3', 'M4', 'M5'].map((id) => ({
-    id,
-    name: `Male ${id.slice(1)}`,
-    gender: 'male' as const,
-  })),
-  ...['F1', 'F2', 'F3', 'F4', 'F5'].map((id) => ({
-    id,
-    name: `Female ${id.slice(1)}`,
-    gender: 'female' as const,
-  })),
-]
-const PRESET_IDS = new Set(PRESET_VOICES.map((v) => v.id))
-
-/** Unset/unknown voice ids (e.g. a fresh install) fall back to the default. */
-function presetVoiceId(voiceId: string | undefined): string {
-  return voiceId && PRESET_IDS.has(voiceId) ? voiceId : 'M1'
-}
+import { PRESET_VOICES, presetVoiceId } from './supertonic/presetVoices'
 
 /**
  * Supertonic through the native Android pipeline: inference and playback run

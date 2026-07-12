@@ -16,6 +16,7 @@ import type {
   WorkerRequest,
   WorkerResponse,
 } from './supertonic/supertonicWorker'
+import { PRESET_VOICES, presetVoiceId } from './supertonic/presetVoices'
 
 export interface SupertonicConfigOptions {
   /**
@@ -32,19 +33,6 @@ export interface SupertonicConfigOptions {
   wasmPaths?: string
 }
 
-const PRESET_VOICES: TtsVoice[] = [
-  ...['M1', 'M2', 'M3', 'M4', 'M5'].map((id) => ({
-    id,
-    name: `Male ${id.slice(1)}`,
-    gender: 'male' as const,
-  })),
-  ...['F1', 'F2', 'F3', 'F4', 'F5'].map((id) => ({
-    id,
-    name: `Female ${id.slice(1)}`,
-    gender: 'female' as const,
-  })),
-]
-const PRESET_IDS = new Set(PRESET_VOICES.map((v) => v.id))
 
 /** Generous: first init compiles wasm kernels and runs two warm-up passes. */
 const WORKER_INIT_TIMEOUT_MS = 120_000
@@ -290,8 +278,7 @@ export class SupertonicEngine implements TtsEngine {
 
   /** Synthesize (or return cached) PCM for a chunk. */
   private synthesize(text: string, options: SpeakOptions): Promise<Float32Array> {
-    const voiceId =
-      options.voiceId && PRESET_IDS.has(options.voiceId) ? options.voiceId : 'M1'
+    const voiceId = presetVoiceId(options.voiceId)
     const key = `${voiceId}|${options.rate}|${text}`
     const cached = this.cache.get(key)
     if (cached) return Promise.resolve(cached)

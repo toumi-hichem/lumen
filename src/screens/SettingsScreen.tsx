@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTheme } from '@/theme/ThemeProvider'
 import { useSettingsStore } from '@/store/settingsStore'
-import { createTtsEngine, listTtsEngines } from '@/tts/registry'
-import type { TtsVoice } from '@/tts/types'
+import { listTtsEngines } from '@/tts/registry'
 import {
   downloadBlob,
   exportBackup,
@@ -11,6 +10,8 @@ import {
 } from '@/services/backup'
 import { getErrorMessage } from '@/lib/result'
 import { Select, type SelectOption } from '@/ui/Select'
+import { VoicePickerDialog } from '@/ui/VoicePickerDialog'
+import { useVoicePreview, useVoices } from '@/ui/voiceHooks'
 import { Toggle } from '@/ui/Toggle'
 import { Slider } from '@/ui/Slider'
 import { Icon } from '@/ui/Icon'
@@ -28,6 +29,7 @@ export function SettingsScreen() {
 
   const engines = listTtsEngines()
   const voices = useVoices(tts.engineId)
+  const voicePreview = useVoicePreview(tts.engineId)
   const backupInput = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState<string>()
 
@@ -37,13 +39,6 @@ export function SettingsScreen() {
     hint: !e.available ? 'unavailable' : e.requiresAssets ? 'needs assets' : undefined,
     disabled: !e.available,
   }))
-  const voiceOptions: SelectOption[] = [
-    { value: '', label: 'Default' },
-    ...voices.map((v) => ({
-      value: v.id,
-      label: v.lang ? `${v.name} (${v.lang})` : v.name,
-    })),
-  ]
 
   const doExport = async () => {
     setBusy('Exporting…')
@@ -292,17 +287,17 @@ export function SettingsScreen() {
             <Select
               ariaLabel="Speech engine"
               value={tts.engineId}
-              onChange={(engineId) => setTts({ engineId, voiceId: '', engineChosen: true })}
+              onChange={(engineId) => setTts({ engineId, engineChosen: true })}
               options={engineOptions}
             />
           </div>
           <div className="setting-row">
             <span>Voice</span>
-            <Select
-              ariaLabel="Voice"
+            <VoicePickerDialog
+              voices={voices}
               value={tts.voiceId}
               onChange={(voiceId) => setTts({ voiceId })}
-              options={voiceOptions}
+              preview={voicePreview}
             />
           </div>
           <Slider
@@ -414,21 +409,4 @@ export function SettingsScreen() {
       </main>
     </div>
   )
-}
-
-/** Load the available voices for a given engine (safe for non-initialized). */
-function useVoices(engineId: string): TtsVoice[] {
-  const [voices, setVoices] = useState<TtsVoice[]>([])
-  useEffect(() => {
-    let active = true
-    const engine = createTtsEngine(engineId)
-    engine
-      .listVoices()
-      .then((v) => active && setVoices(v))
-      .catch(() => active && setVoices([]))
-    return () => {
-      active = false
-    }
-  }, [engineId])
-  return voices
 }

@@ -1298,6 +1298,23 @@
   font-size: 12px;
   color: var(--color-text-muted);
 }
+.voice-picker-preview {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.voice-picker-preview.active {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
 .voice-picker-check {
   color: var(--color-primary);
   flex-shrink: 0;

@@ -1,14 +1,23 @@
 import { useMemo, useState } from 'react'
-import { Check, ChevronDown, Search, X } from 'lucide-react'
+import { Check, ChevronDown, Loader2, Search, Square, Volume2, X } from 'lucide-react'
 import type { TtsVoice } from '@/tts/types'
+import type { VoicePreviewApi } from './voiceHooks'
 
 interface VoicePickerDialogProps {
   voices: TtsVoice[]
   value: string
   onChange: (id: string) => void
+  /** Optional per-voice audio preview (a small play button on each row). */
+  preview?: VoicePreviewApi
 }
 
-export function VoicePickerDialog({ voices, value, onChange }: VoicePickerDialogProps) {
+function voiceSubtitle(voice: TtsVoice): string | null {
+  if (voice.lang) return voice.lang
+  if (voice.gender) return voice.gender === 'male' ? 'Male voice' : 'Female voice'
+  return null
+}
+
+export function VoicePickerDialog({ voices, value, onChange, preview }: VoicePickerDialogProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
 
@@ -23,11 +32,13 @@ export function VoicePickerDialog({ voices, value, onChange }: VoicePickerDialog
     return voices.filter(
       (v) =>
         v.name.toLowerCase().includes(q) ||
-        (v.lang && v.lang.toLowerCase().includes(q)),
+        (v.lang && v.lang.toLowerCase().includes(q)) ||
+        (v.gender && v.gender.includes(q)),
     )
   }, [voices, query])
 
   const close = () => {
+    preview?.stop()
     setOpen(false)
     setQuery('')
   }
@@ -35,6 +46,61 @@ export function VoicePickerDialog({ voices, value, onChange }: VoicePickerDialog
   const pick = (id: string) => {
     onChange(id)
     close()
+  }
+
+  const previewButton = (voice: TtsVoice | null) => {
+    if (!preview) return null
+    const id = voice?.id ?? ''
+    const active = preview.previewingId === id
+    return (
+      <button
+        className={`voice-picker-preview${active ? ' active' : ''}`}
+        onClick={(e) => {
+          e.stopPropagation()
+          preview.toggle(voice)
+        }}
+        aria-label={active ? 'Stop preview' : `Preview ${voice?.name ?? 'default voice'}`}
+      >
+        {active && preview.loading ? (
+          <Loader2 size={14} className="spin" />
+        ) : active ? (
+          <Square size={13} />
+        ) : (
+          <Volume2 size={14} />
+        )}
+      </button>
+    )
+  }
+
+  // Rows are divs (not buttons) so the nested preview button stays valid HTML.
+  const row = (voice: TtsVoice | null) => {
+    const id = voice?.id ?? ''
+    const isSelected = id === value
+    return (
+      <div
+        key={id || 'default'}
+        className={`voice-picker-item${isSelected ? ' selected' : ''}`}
+        role="option"
+        aria-selected={isSelected}
+        tabIndex={0}
+        onClick={() => pick(id)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            pick(id)
+          }
+        }}
+      >
+        <div className="voice-picker-item-info">
+          <span className="voice-picker-item-name">{voice?.name ?? 'Default'}</span>
+          {voice && voiceSubtitle(voice) && (
+            <span className="voice-picker-item-lang">{voiceSubtitle(voice)}</span>
+          )}
+        </div>
+        {previewButton(voice)}
+        {isSelected && <Check size={16} className="voice-picker-check" />}
+      </div>
+    )
   }
 
   return (
@@ -72,34 +138,8 @@ export function VoicePickerDialog({ voices, value, onChange }: VoicePickerDialog
             </div>
 
             <div className="voice-picker-list" role="listbox" aria-label="Voice options">
-              <button
-                className={`voice-picker-item${value === '' ? ' selected' : ''}`}
-                role="option"
-                aria-selected={value === ''}
-                onClick={() => pick('')}
-              >
-                <div className="voice-picker-item-info">
-                  <span className="voice-picker-item-name">Default</span>
-                </div>
-                {value === '' && <Check size={16} className="voice-picker-check" />}
-              </button>
-
-              {filtered.map((v) => (
-                <button
-                  key={v.id}
-                  className={`voice-picker-item${v.id === value ? ' selected' : ''}`}
-                  role="option"
-                  aria-selected={v.id === value}
-                  onClick={() => pick(v.id)}
-                >
-                  <div className="voice-picker-item-info">
-                    <span className="voice-picker-item-name">{v.name}</span>
-                    {v.lang && <span className="voice-picker-item-lang">{v.lang}</span>}
-                  </div>
-                  {v.id === value && <Check size={16} className="voice-picker-check" />}
-                </button>
-              ))}
-
+              {row(null)}
+              {filtered.map((v) => row(v))}
               {filtered.length === 0 && (
                 <p className="voice-picker-empty">No voices match</p>
               )}

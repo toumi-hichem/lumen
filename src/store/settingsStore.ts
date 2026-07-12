@@ -46,6 +46,8 @@ export interface ReadingPreferences {
 export interface TtsPreferences {
   engineId: string
   voiceId: string
+  /** Last selected voice per engine, so switching engines restores the pick. */
+  voiceByEngine: Record<string, string>
   /** Speech rate multiplier, 0.5–2.0. */
   rate: number
   pitch: number
@@ -87,6 +89,7 @@ export const defaultSettings: AppSettings = {
   tts: {
     engineId: 'web-speech',
     voiceId: '',
+    voiceByEngine: {},
     rate: 1,
     pitch: 1,
     granularity: 'sentence',
@@ -123,7 +126,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setTts: (patch) => {
-    const tts = { ...get().tts, ...patch }
+    const prev = get().tts
+    const tts = { ...prev, ...patch }
+    if (patch.voiceId !== undefined) {
+      // Remember the pick for this engine so switching back restores it.
+      tts.voiceByEngine = { ...prev.voiceByEngine, [tts.engineId]: patch.voiceId }
+    } else if (patch.engineId !== undefined && patch.engineId !== prev.engineId) {
+      // Engine changed without an explicit voice: restore its last voice
+      // (voice ids are engine-specific, so the old one would be invalid).
+      tts.voiceId = prev.voiceByEngine[patch.engineId] ?? ''
+    }
     set({ tts })
     void saveJson(SETTINGS_KEY, { reading: get().reading, tts })
   },

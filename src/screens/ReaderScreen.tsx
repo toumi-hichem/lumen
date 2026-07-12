@@ -158,13 +158,20 @@ export function ReaderScreen() {
     clear: reader.clearSpokenHighlight,
   })
 
+  // Which book's saved TTS settings have been restored. Guards the persist
+  // effect below so opening a book never overwrites its remembered voice with
+  // the global one before the restore has run.
+  const ttsRestoredBookRef = useRef<string | null>(null)
+
   useEffect(() => {
     const id = reader.book?.id
     if (!id) return
+    ttsRestoredBookRef.current = null
     void bookSettingsRepository.get(id).then((saved) => {
-      if (!saved) return
       const current = useSettingsStore.getState().tts
-      if (!current.engineChosen && saved.ttsEngineId) {
+      if (!saved) {
+        // Nothing remembered for this book yet.
+      } else if (!current.engineChosen && saved.ttsEngineId) {
         // No explicit global engine choice yet — adopt the book's remembered
         // engine together with its voice.
         setTts({
@@ -172,36 +179,39 @@ export function ReaderScreen() {
           ...(saved.ttsVoiceId !== undefined ? { voiceId: saved.ttsVoiceId } : {}),
           ...(saved.ttsRate ? { rate: saved.ttsRate } : {}),
         })
-        return
+      } else {
+        // The user picked an engine globally — it wins. A per-book engine must
+        // not silently override it. Restore voice/rate only when the remembered
+        // engine matches the one in use (voice ids are engine-specific).
+        const sameEngine = !saved.ttsEngineId || saved.ttsEngineId === current.engineId
+        setTts({
+          ...(sameEngine && saved.ttsVoiceId !== undefined ? { voiceId: saved.ttsVoiceId } : {}),
+          ...(saved.ttsRate ? { rate: saved.ttsRate } : {}),
+        })
       }
-      // The user picked an engine globally — it wins. A per-book engine must
-      // not silently override it. Restore voice/rate only when the remembered
-      // engine matches the one in use (voice ids are engine-specific).
-      const sameEngine = !saved.ttsEngineId || saved.ttsEngineId === current.engineId
-      setTts({
-        ...(sameEngine && saved.ttsVoiceId !== undefined ? { voiceId: saved.ttsVoiceId } : {}),
-        ...(saved.ttsRate ? { rate: saved.ttsRate } : {}),
-      })
+      ttsRestoredBookRef.current = id
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reader.book?.id])
 
-  const rememberVoice = () => {
-    if (!reader.book) return
+  // Remember the latest engine/voice/rate for this book as soon as it changes,
+  // not just when narration starts, so a new pick survives reopening the book.
+  useEffect(() => {
+    const id = reader.book?.id
+    if (!id || ttsRestoredBookRef.current !== id) return
     void bookSettingsRepository.save({
-      bookId: reader.book.id,
+      bookId: id,
       ttsEngineId: ttsPrefs.engineId,
       ttsVoiceId: ttsPrefs.voiceId,
       ttsRate: ttsPrefs.rate,
     })
-  }
+  }, [reader.book?.id, ttsPrefs.engineId, ttsPrefs.voiceId, ttsPrefs.rate])
 
   const startReadAloud = async () => {
     const chunks = await reader.getSpeakableChunks(maxChars)
     if (chunks.length) {
       // Begin narration at the top of the page being read, not the chapter.
       tts.start(chunks, reader.currentChunkIndex())
-      rememberVoice()
     }
   }
 
@@ -219,7 +229,6 @@ export function ReaderScreen() {
       if (found >= 0) index = found
     }
     tts.start(chunks, index ?? 0)
-    rememberVoice()
   }
 
   const seek = (event: React.MouseEvent<HTMLDivElement>) => {

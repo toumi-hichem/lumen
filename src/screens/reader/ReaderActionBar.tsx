@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react'
 import {
   Moon, Sun, Headphones, Pause, Play, Square, Loader2,
   ChevronsDown, List, Bookmark, Search, Settings2,
@@ -12,8 +11,7 @@ import { Select, type SelectOption } from '@/ui/Select'
 import { Toggle } from '@/ui/Toggle'
 import { Slider } from '@/ui/Slider'
 import { VoicePickerDialog } from '@/ui/VoicePickerDialog'
-import { createTtsEngine } from '@/tts/registry'
-import type { TtsVoice } from '@/tts/types'
+import { useVoicePreview, useVoices } from '@/ui/voiceHooks'
 
 export type FooterMode = 'default' | 'tts' | 'autoscroll'
 
@@ -61,20 +59,6 @@ function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60)
   const s = seconds % 60
   return `${m}:${s.toString().padStart(2, '0')}`
-}
-
-function useVoices(engineId: string): TtsVoice[] {
-  const [voices, setVoices] = useState<TtsVoice[]>([])
-  useEffect(() => {
-    let active = true
-    const engine = createTtsEngine(engineId)
-    void engine
-      .listVoices()
-      .then((v) => { if (active) setVoices(v) })
-      .catch(() => { if (active) setVoices([]) })
-    return () => { active = false }
-  }, [engineId])
-  return voices
 }
 
 export function ReaderActionBar(props: ReaderActionBarProps) {
@@ -221,6 +205,7 @@ export function TtsPanel(props: TtsPanelProps) {
   const ttsPrefs = useSettingsStore((s) => s.tts)
   const setTts = useSettingsStore((s) => s.setTts)
   const voices = useVoices(ttsPrefs.engineId)
+  const preview = useVoicePreview(ttsPrefs.engineId)
   const progressLine = ttsProgressLine(props)
 
   return (
@@ -292,6 +277,7 @@ export function TtsPanel(props: TtsPanelProps) {
           voices={voices}
           value={ttsPrefs.voiceId}
           onChange={(voiceId) => setTts({ voiceId })}
+          preview={preview}
         />
       </div>
 
