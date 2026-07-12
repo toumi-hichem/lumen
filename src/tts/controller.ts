@@ -44,6 +44,9 @@ export class TtsController {
   private queueMode = false
   /** Voice/rate changed while a queue was paused; re-hand it over on resume. */
   private queueOptionsStale = false
+  /** Bumped whenever a new run loop starts; a stale loop exits instead of
+   *  racing the one that superseded it (e.g. a voice-change restart). */
+  private runToken = 0
 
   constructor(private readonly events: TtsControllerEvents = {}) {}
 
@@ -143,19 +146,19 @@ export class TtsController {
   setOptions(options: SpeakOptions): void {
     const prev = this.options
     this.options = options
-    // Chunk-by-chunk engines pick options up on the next sentence, but a
-    // queue engine (the native service) received voice and rate when the
-    // whole queue was handed over. Re-hand the queue from the current
-    // sentence so the change is audible now, not on the next chapter.
-    if (
-      this.queueMode &&
-      (options.voiceId !== prev.voiceId || options.rate !== prev.rate)
-    ) {
-      if (this.status === 'playing') {
-        void this.play(this.chunks, options, this.index)
-      } else if (this.status === 'paused') {
-        this.queueOptionsStale = true
-      }
+    if (options.voiceId === prev.voiceId && options.rate === prev.rate) return
+    // Make a voice/rate change audible immediately: restart the current
+    // sentence with the new options. Queue engines (the native service) get
+    // the whole queue re-handed from the current index; chunk engines stop
+    // the in-flight utterance and let a fresh run loop take over (the stale
+    // loop exits via runToken instead of double-speaking).
+    if (this.status === 'playing') {
+      if (!this.queueMode) this.engine?.stop()
+      void this.play(this.chunks, options, this.index)
+    } else if (this.status === 'paused' && this.queueMode) {
+      // Re-hand the queue on resume; a plain resumeQueue() would keep the
+      // audio the native side already synthesized with the old voice.
+      this.queueOptionsStale = true
     }
   }
 
@@ -201,10 +204,12 @@ export class TtsController {
 
   private async run(): Promise<void> {
     if (!this.engine) return
+    const token = ++this.runToken
     this.setStatus('playing')
     while (this.index < this.chunks.length) {
-      // A pause/stop flips status; bail out of the loop if so.
-      if (this.status !== 'playing') return
+      // A pause/stop flips status, and a restart (voice change) bumps the
+      // token; a superseded loop must exit without touching shared state.
+      if (token !== this.runToken || this.status !== 'playing') return
       this.events.onChunk?.(this.index)
       // Start the current chunk first (this synchronously queues its synthesis),
       // then prefetch upcoming ones so neural engines render them during
@@ -219,13 +224,15 @@ export class TtsController {
       try {
         await speaking
       } catch (error) {
+        if (token !== this.runToken) return // superseded; not our error
         this.events.onError?.(getErrorMessage(error))
         this.setStatus('idle')
         return
       }
-      if (this.status !== 'playing') return
+      if (token !== this.runToken || this.status !== 'playing') return
       this.index += 1
     }
+    if (token !== this.runToken) return
     this.index = 0
     this.setStatus('idle')
     this.events.onComplete?.()

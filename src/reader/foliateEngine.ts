@@ -100,6 +100,7 @@ export class FoliateEngine implements BookEngine {
         progress,
         chapterProgress: this.chapterFraction(progress),
         chapterTitle: detail.tocItem?.label?.trim() || undefined,
+        chapterHref: detail.tocItem?.href || undefined,
       }
       // Chunk anchors are section-relative; invalidate on navigation.
       this.spans = []
@@ -346,13 +347,14 @@ export class FoliateEngine implements BookEngine {
     // mangling the value.
     this.readalongValue = chunk.anchor
     void this.view.addAnnotation({ value: chunk.anchor }).catch(() => undefined)
-    // Follow the spoken text: page/scroll to it. Resolve + goTo on the
-    // renderer directly so read-along doesn't spam the navigation history.
-    // We don't await goTo() to avoid blocking playback, but we do fire it
-    // so the UI advances to show the chunk being spoken.
+    // Follow the spoken text — but only when it left the screen. Navigating
+    // on every chunk would re-align the view so each paragraph jumps to the
+    // top; while the chunk is already visible, the highlight alone moves.
+    // Resolve + goTo on the renderer directly so read-along doesn't spam the
+    // navigation history. We don't await goTo() to avoid blocking playback.
     try {
       const resolved = this.view.resolveNavigation(chunk.anchor)
-      if (resolved) {
+      if (resolved && !this.isResolvedVisible(resolved)) {
         // goTo may return a Promise; fire it without waiting so the
         // navigation happens in the background while audio plays.
         const result = this.view.renderer.goTo(resolved)
@@ -364,6 +366,29 @@ export class FoliateEngine implements BookEngine {
       }
     } catch {
       // Anchor may be stale after a relayout; ignore.
+    }
+  }
+
+  /** True when a resolved anchor's start sits inside the visible range of the
+   *  current page/viewport (from the last relocate event). */
+  private isResolvedVisible(resolved: {
+    index: number
+    anchor?: (doc: Document) => Range | Element
+  }): boolean {
+    const visible = this.lastRange
+    if (!visible) return false
+    const content = this.contents().find((c) => c.index === resolved.index)
+    if (!content || !resolved.anchor) return false
+    const target = anchorToRange(resolved.anchor(content.doc), content.doc)
+    if (!target) return false
+    // Ranges from different section documents are not comparable.
+    if (target.startContainer.ownerDocument !== visible.startContainer.ownerDocument) {
+      return false
+    }
+    try {
+      return visible.comparePoint(target.startContainer, target.startOffset) === 0
+    } catch {
+      return false
     }
   }
 

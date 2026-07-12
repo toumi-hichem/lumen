@@ -114,7 +114,15 @@ public class SupertonicTtsService extends Service {
     /** Poison pill signalling the end of the queue to the playback thread. */
     private static final Synthesized END = new Synthesized(-1, new float[0]);
 
-    private final AtomicBoolean cancelled = new AtomicBoolean(false);
+    /**
+     * Cancellation token of the CURRENT queue. Each start() installs a fresh
+     * token and threads capture the one they were born with: replacing the
+     * queue (e.g. a voice change mid-playback) cancels only the old token.
+     * Re-using a single flag here was a race — start() would reset it while
+     * the old threads were still winding down, re-arming them against the new
+     * queue's AudioTrack and runtime.
+     */
+    private volatile AtomicBoolean cancelled = new AtomicBoolean(false);
     private final Object pauseLock = new Object();
     private volatile boolean paused = false;
     /** Mono frames written to the current AudioTrack, for end-of-queue drain. */
@@ -172,10 +180,12 @@ public class SupertonicTtsService extends Service {
     }
 
     private void start(Request req) {
-        // A new queue replaces any current one.
+        // A new queue replaces any current one: cancel the old token, then
+        // install a fresh one so the outgoing threads can never be re-armed.
         stopThreads();
+        AtomicBoolean token = new AtomicBoolean(false);
+        this.cancelled = token;
         this.request = req;
-        this.cancelled.set(false);
         this.paused = false;
         this.currentLine = null;
 
@@ -183,11 +193,11 @@ public class SupertonicTtsService extends Service {
         goForeground(true);
         acquireWakeLock();
 
-        synthesisThread = new Thread(this::runPipeline, "supertonic-synthesis");
+        synthesisThread = new Thread(() -> runPipeline(req, token), "supertonic-synthesis");
         synthesisThread.start();
     }
 
-    private void runPipeline() {
+    private void runPipeline(Request request, AtomicBoolean cancelled) {
         BlockingQueue<Synthesized> buffer = new ArrayBlockingQueue<>(2);
         Listener l = listener;
         try {
@@ -204,13 +214,15 @@ public class SupertonicTtsService extends Service {
             if (l != null) {
                 l.onModelReady(wasLoaded ? 0 : SystemClock.elapsedRealtime() - loadStart);
             }
+            if (cancelled.get()) return;
             if (!requestAudioFocus()) {
-                fail("Audio focus denied");
+                fail("Audio focus denied", cancelled);
                 return;
             }
             createAudioTrack(runtime.sampleRate());
 
-            playbackThread = new Thread(() -> drainAndPlay(buffer), "supertonic-playback");
+            playbackThread = new Thread(
+                () -> drainAndPlay(buffer, request, cancelled), "supertonic-playback");
             playbackThread.start();
 
             SupertonicRuntime.Style style = runtime.style(request.voiceId);
@@ -257,39 +269,46 @@ public class SupertonicTtsService extends Service {
             // Stopped by the user; playback thread is torn down by stopPlayback().
         } catch (Exception e) {
             Log.e(TAG, "Synthesis failed", e);
-            fail(userMessage(e));
+            if (!cancelled.get()) fail(userMessage(e), cancelled);
         }
     }
 
-    private void drainAndPlay(BlockingQueue<Synthesized> buffer) {
+    private void drainAndPlay(
+            BlockingQueue<Synthesized> buffer, Request request, AtomicBoolean cancelled) {
         Listener l = listener;
         try {
             while (!cancelled.get()) {
                 Synthesized chunk = buffer.take();
                 if (chunk == END) {
-                    drainTail();
+                    // A superseded queue must fall silent, not report
+                    // completion (which would trigger chapter auto-advance)
+                    // or tear the service down under the new queue.
+                    if (cancelled.get()) return;
+                    drainTail(cancelled);
                     if (l != null) l.onComplete();
                     finish();
                     return;
                 }
+                if (cancelled.get()) return;
                 if (l != null) l.onChunk(chunk.index);
                 updateNotificationLine(request.chunks.get(chunk.index));
                 updatePlaybackState(true);
-                writeFully(chunk.samples);
+                writeFully(chunk.samples, cancelled);
                 // The official pipeline joins chunks with 0.3 s of silence;
                 // without it consecutive sentences run into each other.
-                writeFully(interChunkSilence);
+                writeFully(interChunkSilence, cancelled);
             }
         } catch (InterruptedException e) {
             // Stopped.
         } catch (Exception e) {
             Log.e(TAG, "Playback failed", e);
-            fail(userMessage(e));
+            if (!cancelled.get()) fail(userMessage(e), cancelled);
         }
     }
 
     /** Blocking write, honouring pause (AudioTrack.pause blocks write consumers). */
-    private void writeFully(float[] samples) throws InterruptedException {
+    private void writeFully(float[] samples, AtomicBoolean cancelled)
+            throws InterruptedException {
         int offset = 0;
         while (offset < samples.length && !cancelled.get()) {
             synchronized (pauseLock) {
@@ -305,7 +324,7 @@ public class SupertonicTtsService extends Service {
     }
 
     /** Let the buffered tail of the last chunk play out before finishing. */
-    private void drainTail() throws InterruptedException {
+    private void drainTail(AtomicBoolean cancelled) throws InterruptedException {
         if (audioTrack == null) return;
         long deadline = System.currentTimeMillis() + 3000;
         while (!cancelled.get() && System.currentTimeMillis() < deadline) {
@@ -349,7 +368,7 @@ public class SupertonicTtsService extends Service {
         finish();
     }
 
-    private void fail(String message) {
+    private void fail(String message, AtomicBoolean cancelled) {
         Listener l = listener;
         if (l != null) l.onError(message);
         cancelled.set(true);

@@ -42,6 +42,52 @@ registerTtsEngine({
   available: () => true,
 })
 
+/** Engine whose speak() stays pending until resolved, to test mid-playback
+ *  behaviour (voice changes, interrupts). stop() resolves in-flight speech
+ *  like the real engines do. */
+class ManualEngine implements TtsEngine {
+  readonly id = 'fake-manual'
+  readonly name = 'Manual'
+  readonly requiresAssets = false
+  spoken: Array<{ text: string; voiceId?: string }> = []
+  private resolvers: Array<() => void> = []
+  private ready = false
+  async init(): Promise<void> {
+    this.ready = true
+  }
+  isReady(): boolean {
+    return this.ready
+  }
+  async listVoices() {
+    return []
+  }
+  speak(text: string, options: SpeakOptions): Promise<void> {
+    this.spoken.push({ text, voiceId: options.voiceId })
+    return new Promise<void>((resolve) => this.resolvers.push(resolve))
+  }
+  finishCurrent(): void {
+    this.resolvers.shift()?.()
+  }
+  stop(): void {
+    for (const resolve of this.resolvers.splice(0)) resolve()
+  }
+  dispose(): void {}
+}
+
+let lastManualEngine: ManualEngine | null = null
+registerTtsEngine({
+  id: 'fake-manual',
+  name: 'Manual',
+  requiresAssets: false,
+  factory: () => {
+    lastManualEngine = new ManualEngine()
+    return lastManualEngine
+  },
+  available: () => true,
+})
+
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
+
 const opts: SpeakOptions = { rate: 1, pitch: 1 }
 
 describe('TtsController', () => {
@@ -84,5 +130,50 @@ describe('TtsController', () => {
     await controller.play(['a'], opts)
     expect(statuses).toContain('playing')
     expect(statuses.at(-1)).toBe('idle')
+  })
+
+  it('restarts the current chunk immediately on a voice change', async () => {
+    const controller = new TtsController({})
+    await controller.useEngine('fake-manual')
+    const engine = lastManualEngine as ManualEngine
+
+    const playing = controller.play(['one', 'two'], opts)
+    await tick()
+    expect(engine.spoken).toEqual([{ text: 'one', voiceId: undefined }])
+
+    // Change the voice mid-sentence: the current chunk restarts with the new
+    // voice, and the superseded run loop must not double-speak or skip.
+    controller.setOptions({ rate: 1, pitch: 1, voiceId: 'B' })
+    await tick()
+    expect(engine.spoken).toEqual([
+      { text: 'one', voiceId: undefined },
+      { text: 'one', voiceId: 'B' },
+    ])
+
+    engine.finishCurrent()
+    await tick()
+    engine.finishCurrent()
+    await tick()
+    await playing
+
+    expect(engine.spoken).toEqual([
+      { text: 'one', voiceId: undefined },
+      { text: 'one', voiceId: 'B' },
+      { text: 'two', voiceId: 'B' },
+    ])
+    expect(controller.getStatus()).toBe('idle')
+  })
+
+  it('does not restart when options are unchanged', async () => {
+    const controller = new TtsController({})
+    await controller.useEngine('fake-manual')
+    const engine = lastManualEngine as ManualEngine
+
+    void controller.play(['one'], opts)
+    await tick()
+    controller.setOptions({ ...opts })
+    await tick()
+    expect(engine.spoken).toEqual([{ text: 'one', voiceId: undefined }])
+    engine.finishCurrent()
   })
 })

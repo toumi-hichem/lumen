@@ -8,6 +8,9 @@ export interface BookLocationInfo {
    *  compute it. UI falls back to `progress` when absent. */
   chapterProgress?: number
   chapterTitle?: string
+  /** TOC href of the current chapter, matching TocItem.href (for marking the
+   *  active entry in the contents drawer). */
+  chapterHref?: string
 }
 
 /** Selection bounds in viewport (client) coordinates, used to anchor the menu. */

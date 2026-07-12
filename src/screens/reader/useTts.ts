@@ -164,10 +164,16 @@ export function useTts(options: UseTtsOptions = {}): ReaderTtsApi {
   const start = (next: SpeakableChunk[], startIndex = 0) => {
     setError(undefined)
     setChunks(next)
+    // Mirror the start index into state immediately. The controller only
+    // reports it via onChunk once the engine actually speaks (async on the
+    // native queue path), and until then read-along would locate the stale
+    // index — visibly flashing to the chapter start before jumping back.
+    const clamped = Math.max(0, Math.min(startIndex, next.length - 1))
+    setChunkIndex(clamped)
     void controllerRef.current?.play(
       next.map((c) => c.text),
       { rate: tts.rate, pitch: tts.pitch, voiceId: tts.voiceId },
-      startIndex,
+      clamped,
     )
   }
 

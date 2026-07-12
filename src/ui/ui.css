@@ -1040,6 +1040,13 @@
 .list-item small {
   color: var(--color-text-muted);
 }
+/* The chapter currently being read, in the Contents drawer. */
+.list-item.current-chapter {
+  background: var(--color-surface-alt);
+  color: var(--color-primary);
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--color-primary);
+}
 
 /* --- Settings --- */
 .settings-section {

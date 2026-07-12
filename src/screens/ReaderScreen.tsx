@@ -479,6 +479,8 @@ export function ReaderScreen() {
         activeTab={panelTab}
         onTabChange={setPanelTab}
         toc={reader.toc}
+        currentChapterHref={reader.location?.chapterHref}
+        currentChapterTitle={reader.location?.chapterTitle}
         bookmarks={reader.bookmarks}
         highlights={reader.highlights}
         onNavigate={reader.goTo}

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Bookmark, Highlight } from '@/domain/models'
 import type { SearchHit, TocItem } from '@/reader/types'
 
@@ -9,6 +9,10 @@ interface ReaderPanelProps {
   activeTab: PanelTab
   onTabChange: (tab: PanelTab) => void
   toc: TocItem[]
+  /** TOC href of the chapter being read; marked and scrolled to in Contents. */
+  currentChapterHref?: string
+  /** Fallback for engines/books whose relocate carries no href. */
+  currentChapterTitle?: string
   bookmarks: Bookmark[]
   highlights: Highlight[]
   onNavigate: (target: string) => void
@@ -27,6 +31,8 @@ export function ReaderPanel({
   activeTab,
   onTabChange,
   toc,
+  currentChapterHref,
+  currentChapterTitle,
   bookmarks,
   highlights,
   onNavigate,
@@ -40,6 +46,22 @@ export function ReaderPanel({
   const [results, setResults] = useState<SearchHit[]>([])
   const [searching, setSearching] = useState(false)
   const [searchProgress, setSearchProgress] = useState(0)
+  const activeTocItem = useRef<HTMLButtonElement | null>(null)
+
+  // Prefer the href (unique); labels are only a fallback for engines whose
+  // location has no href. Marks the first matching entry.
+  const currentTocIndex = toc.findIndex((item) =>
+    currentChapterHref
+      ? item.href === currentChapterHref
+      : Boolean(currentChapterTitle) && item.label === currentChapterTitle,
+  )
+
+  // Bring the current chapter into view when the Contents drawer opens.
+  useEffect(() => {
+    if (open && activeTab === 'toc') {
+      activeTocItem.current?.scrollIntoView({ block: 'center' })
+    }
+  }, [open, activeTab, currentTocIndex])
 
   const runSearch = async () => {
     if (query.trim().length < 2) return
@@ -95,19 +117,24 @@ export function ReaderPanel({
         <div className="panel-list">
           {activeTab === 'toc' &&
             (toc.length ? (
-              toc.map((item, i) => (
-                <button
-                  key={`${item.href}-${i}`}
-                  className="list-item"
-                  style={{ paddingLeft: 12 + item.level * 16 }}
-                  onClick={() => {
-                    onNavigate(item.href)
-                    onClose()
-                  }}
-                >
-                  {item.label || 'Untitled'}
-                </button>
-              ))
+              toc.map((item, i) => {
+                const current = i === currentTocIndex
+                return (
+                  <button
+                    key={`${item.href}-${i}`}
+                    ref={current ? activeTocItem : undefined}
+                    className={`list-item${current ? ' current-chapter' : ''}`}
+                    style={{ paddingLeft: 12 + item.level * 16 }}
+                    aria-current={current ? 'true' : undefined}
+                    onClick={() => {
+                      onNavigate(item.href)
+                      onClose()
+                    }}
+                  >
+                    {item.label || 'Untitled'}
+                  </button>
+                )
+              })
             ) : (
               <p className="muted">No table of contents.</p>
             ))}
