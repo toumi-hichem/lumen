@@ -1040,12 +1040,71 @@
 .list-item small {
   color: var(--color-text-muted);
 }
-/* The chapter currently being read, in the Contents drawer. */
-.list-item.current-chapter {
+/* --- Contents (TOC) rows --- */
+.toc-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 11px 12px;
+  padding-left: calc(12px + var(--toc-indent, 0px));
+  margin: 1px 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.toc-item:hover {
   background: var(--color-surface-alt);
+}
+.toc-item:active {
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+}
+.toc-item.nested {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+.toc-item-marker {
+  flex-shrink: 0;
+  width: 4px;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-border);
+  transition: height 0.2s ease, background 0.2s ease;
+}
+.toc-item-label {
+  flex: 1;
+  min-width: 0;
+}
+/* The chapter currently being read. */
+.toc-item.current {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-primary) 14%, transparent),
+    color-mix(in srgb, var(--color-primary) 4%, transparent)
+  );
   color: var(--color-primary);
   font-weight: 600;
-  box-shadow: inset 3px 0 0 var(--color-primary);
+}
+.toc-item.current .toc-item-marker {
+  height: 18px;
+  background: var(--color-primary);
+}
+.toc-item-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
 }
 
 /* --- Settings --- */

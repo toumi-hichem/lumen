@@ -123,15 +123,17 @@ export function ReaderPanel({
                   <button
                     key={`${item.href}-${i}`}
                     ref={current ? activeTocItem : undefined}
-                    className={`list-item${current ? ' current-chapter' : ''}`}
-                    style={{ paddingLeft: 12 + item.level * 16 }}
+                    className={`toc-item${current ? ' current' : ''}${item.level > 0 ? ' nested' : ''}`}
+                    style={{ '--toc-indent': `${item.level * 16}px` } as React.CSSProperties}
                     aria-current={current ? 'true' : undefined}
                     onClick={() => {
                       onNavigate(item.href)
                       onClose()
                     }}
                   >
-                    {item.label || 'Untitled'}
+                    <span className="toc-item-marker" aria-hidden="true" />
+                    <span className="toc-item-label">{item.label || 'Untitled'}</span>
+                    {current && <span className="toc-item-badge">Reading</span>}
                   </button>
                 )
               })
