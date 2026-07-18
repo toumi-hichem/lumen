@@ -98,6 +98,12 @@ export interface TtsEngineDescriptor {
   requiresAssets: boolean
   /** True only if the runtime can actually use it (e.g. WebGPU/WASM present). */
   available: boolean
+  /**
+   * Resolves true when the engine's downloadable assets are present. Absent for
+   * engines that need none. `requiresAssets` says the engine *can* need a
+   * download; this says whether that download has happened.
+   */
+  assetsReady?: () => Promise<boolean>
 }
 
 export class TtsNotAvailableError extends Error {

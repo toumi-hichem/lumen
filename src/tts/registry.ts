@@ -5,6 +5,7 @@ import { SupertonicEngine } from './supertonicEngine'
 import { SupertonicNativeEngine } from './supertonicNativeEngine'
 import { NativeTtsEngine } from './nativeTtsEngine'
 import { hasNativeSupertonic } from './supertonic/nativeBridge'
+import { isSupertonicInstalled } from './supertonic/install'
 import type { TtsEngine, TtsEngineDescriptor } from './types'
 
 type EngineFactory = () => TtsEngine
@@ -16,6 +17,8 @@ interface RegisteredEngine {
   factory: EngineFactory
   /** Runtime availability check (feature detection). */
   available: () => boolean
+  /** Whether the downloadable assets are present. Only for `requiresAssets` engines. */
+  assetsReady?: () => Promise<boolean>
 }
 
 /**
@@ -57,6 +60,7 @@ registerTtsEngine({
   factory: () =>
     hasNativeSupertonic() ? new SupertonicNativeEngine() : new SupertonicEngine(),
   available: () => hasNativeSupertonic() || typeof WebAssembly !== 'undefined',
+  assetsReady: () => isSupertonicInstalled(),
 })
 
 export const DEFAULT_ENGINE_ID = 'web-speech'
@@ -86,5 +90,20 @@ export function listTtsEngines(): TtsEngineDescriptor[] {
     name: e.name,
     requiresAssets: e.requiresAssets,
     available: e.available(),
+    assetsReady: e.assetsReady,
   }))
+}
+
+/**
+ * Short status shown next to an engine in the picker, or undefined when it is
+ * ready to use. `assetsReady` is resolved by the caller, since probing storage
+ * is async.
+ */
+export function engineHint(
+  engine: TtsEngineDescriptor,
+  assetsReady: boolean,
+): 'unavailable' | 'needs assets' | undefined {
+  if (!engine.available) return 'unavailable'
+  if (engine.requiresAssets && !assetsReady) return 'needs assets'
+  return undefined
 }

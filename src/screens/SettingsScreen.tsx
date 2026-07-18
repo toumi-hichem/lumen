@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   BookOpen,
@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { useTheme } from '@/theme/ThemeProvider'
 import { useSettingsStore } from '@/store/settingsStore'
-import { listTtsEngines } from '@/tts/registry'
+import { engineHint, listTtsEngines } from '@/tts/registry'
 import {
   downloadBlob,
   exportBackup,
@@ -44,10 +44,31 @@ export function SettingsScreen() {
   const backupInput = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState<string>()
 
+  // Which asset-backed engines have their downloads in place. Probing storage is
+  // async, so it is resolved here and re-run whenever an install/removal lands.
+  const [readyEngineIds, setReadyEngineIds] = useState<ReadonlySet<string>>(new Set())
+  const [assetsRevision, setAssetsRevision] = useState(0)
+
+  useEffect(() => {
+    let active = true
+    const probes = engines
+      .filter((e) => e.assetsReady)
+      .map(async (e) => ((await e.assetsReady?.()) ? e.id : null))
+    void Promise.all(probes).then((ids) => {
+      if (active) setReadyEngineIds(new Set(ids.filter((id) => id !== null)))
+    })
+    return () => {
+      active = false
+    }
+    // `engines` is rebuilt every render; the registry itself is static, so the
+    // revision counter is what should actually re-trigger this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assetsRevision])
+
   const engineOptions: SelectOption[] = engines.map((e) => ({
     value: e.id,
     label: e.name,
-    hint: !e.available ? 'unavailable' : e.requiresAssets ? 'needs assets' : undefined,
+    hint: engineHint(e, readyEngineIds.has(e.id)),
     disabled: !e.available,
   }))
 
@@ -342,7 +363,9 @@ export function SettingsScreen() {
               onChange={(autoAdvance) => setTts({ autoAdvance })}
             />
           </div>
-          <SupertonicDownload />
+          <SupertonicDownload
+            onInstallChange={() => setAssetsRevision((n) => n + 1)}
+          />
         </SettingSection>
 
         <SettingSection
