@@ -1118,27 +1118,96 @@
   color: var(--color-text-muted);
   margin: 0 0 12px;
 }
-.setting-row {
+
+/* Settings organized as titled cards with an icon header. */
+.settings-body {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
   gap: 16px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--color-border);
 }
-.font-options {
+.settings-card {
+  margin-bottom: 0;
+  padding: 16px;
+}
+.settings-card-header {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.settings-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+}
+.settings-card-header h2 {
+  font-size: 15px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--color-text);
+  margin: 0;
+  font-family: var(--ui-font);
+  font-weight: 700;
+  line-height: 34px;
+}
+.settings-card-header h2 + .settings-hint,
+.settings-card-header .settings-hint {
+  margin-top: -8px;
+}
+.settings-hint {
+  font-size: 12px;
+  margin: 8px 0 0;
+  line-height: 1.5;
+}
+.settings-card .setting-row:last-child {
+  border-bottom: none;
+  padding-bottom: 4px;
 }
 
-/* Uniform theme picker grid — equal cards, no ragged sizing. */
-.theme-grid {
+/* Light/dark mode segmented control. */
+.mode-segment {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-alt);
+}
+.mode-segment button {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+.mode-segment button.active {
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow-soft);
+}
+
+/* Theme family picker: one card per light/dark pair. */
+.family-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
   gap: 10px;
 }
-.theme-chip {
+.family-chip {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1149,37 +1218,57 @@
   font-size: 12px;
   text-align: left;
   color: var(--color-text);
+  transition: border-color 0.2s ease, transform 0.15s ease;
 }
-.theme-chip.active {
+.family-chip:active {
+  transform: scale(0.97);
+}
+.family-chip.active {
   border-color: var(--color-primary);
 }
-.theme-chip .preview {
+.family-preview {
+  display: flex;
   width: 100%;
   height: 52px;
   border-radius: 8px;
   border: 1px solid var(--color-border);
-  display: flex;
-  align-items: center;
-  padding: 8px;
   overflow: hidden;
 }
-.theme-chip .preview-aa {
-  font-family: var(--display-font);
-  font-size: 22px;
-  line-height: 1;
-}
-.theme-chip-name {
+.family-preview .half {
+  flex: 1;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 4px;
+  justify-content: center;
+  font-family: var(--display-font);
+  font-size: 20px;
+  line-height: 1;
+}
+.family-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   font-weight: 600;
 }
-.theme-chip-mode {
+.family-variant {
   font-size: 10px;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--color-text-muted);
+}
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 14px;
+}
+.font-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 /* --- Custom Select (listbox) --- */

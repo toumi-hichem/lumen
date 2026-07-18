@@ -8,6 +8,9 @@ export type TtsGranularity = 'sentence' | 'paragraph'
 
 export interface ReadingPreferences {
   themeId: string
+  /** Follow the OS light/dark mode by swapping to the theme family's
+   *  matching variant (the picked theme decides the family). */
+  followSystemTheme: boolean
   fontId: string
   /** Font-size multiplier applied to the reader, 0.8–1.8. */
   fontScale: number
@@ -68,6 +71,7 @@ export interface AppSettings {
 export const defaultSettings: AppSettings = {
   reading: {
     themeId: 'daylight',
+    followSystemTheme: false,
     fontId: 'spectral',
     fontScale: 1,
     lineHeight: 1.6,

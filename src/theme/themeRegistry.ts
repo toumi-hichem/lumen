@@ -1,4 +1,4 @@
-import type { FontDefinition, Theme } from './tokens'
+import type { FontDefinition, Theme, ThemeFamily } from './tokens'
 import { builtInThemes } from './themes'
 import { builtInFonts } from './fonts'
 
@@ -35,6 +35,33 @@ class ThemeRegistry {
 
   listThemes(): Theme[] {
     return [...this.themes.values()]
+  }
+
+  /**
+   * Group registered themes into light/dark families, in registration order.
+   * A family missing one of the two modes is skipped (it can't power the
+   * mode toggle), so callers can rely on both variants being present.
+   */
+  listFamilies(): ThemeFamily[] {
+    const byFamily = new Map<string, { name: string; light?: Theme; dark?: Theme }>()
+    for (const theme of this.themes.values()) {
+      const entry = byFamily.get(theme.family) ?? { name: theme.familyName }
+      entry[theme.mode] = entry[theme.mode] ?? theme
+      byFamily.set(theme.family, entry)
+    }
+    const families: ThemeFamily[] = []
+    for (const [id, { name, light, dark }] of byFamily) {
+      if (light && dark) families.push({ id, name, light, dark })
+    }
+    return families
+  }
+
+  /** The opposite-mode theme in the same family, if the family has one. */
+  getCounterpart(theme: Theme): Theme | undefined {
+    for (const other of this.themes.values()) {
+      if (other.family === theme.family && other.mode !== theme.mode) return other
+    }
+    return undefined
   }
 
   listFonts(): FontDefinition[] {

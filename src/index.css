@@ -168,12 +168,87 @@ html[data-theme='e-ink'] {
   --color-danger: #5A2A22;
 }
 
-/* Dark themes get flatter, deeper shadows. */
-:root[data-theme='midnight'],
-:root[data-theme='carbon'],
-:root[data-theme='nord'],
-:root[data-theme='forest'],
-:root[data-theme='dusk'] {
+html[data-theme='ember'] {
+  --color-background: #211A13;
+  --color-surface: #2A2218;
+  --color-surface-alt: #342A1E;
+  --color-text: #EBDFC9;
+  --color-text-muted: #B3A183;
+  --color-primary: #D89A5B;
+  --color-on-primary: #241C12;
+  --color-border: #3E3222;
+  --color-accent: #D89A5B;
+  --color-danger: #E58A75;
+}
+
+html[data-theme='solarized-dark'] {
+  --color-background: #002B36;
+  --color-surface: #073642;
+  --color-surface-alt: #0E4756;
+  --color-text: #A7B8B8;
+  --color-text-muted: #7F969B;
+  --color-primary: #4CA6DE;
+  --color-on-primary: #002B36;
+  --color-border: #10424F;
+  --color-accent: #4CA6DE;
+  --color-danger: #E35D5B;
+}
+
+html[data-theme='frost'] {
+  --color-background: #E5E9F0;
+  --color-surface: #F2F4F8;
+  --color-surface-alt: #D8DEE9;
+  --color-text: #2E3440;
+  --color-text-muted: #556075;
+  --color-primary: #5E81AC;
+  --color-on-primary: #ECEFF4;
+  --color-border: #CDD5E1;
+  --color-accent: #5E81AC;
+  --color-danger: #BF616A;
+}
+
+html[data-theme='meadow'] {
+  --color-background: #F1F5EC;
+  --color-surface: #FAFCF7;
+  --color-surface-alt: #E4ECDC;
+  --color-text: #24301F;
+  --color-text-muted: #5F7156;
+  --color-primary: #3E7B3F;
+  --color-on-primary: #F4FAF0;
+  --color-border: #D6E0CC;
+  --color-accent: #3E7B3F;
+  --color-danger: #C2492F;
+}
+
+html[data-theme='lilac'] {
+  --color-background: #F3F0FA;
+  --color-surface: #FBFAFE;
+  --color-surface-alt: #E9E3F5;
+  --color-text: #2A2438;
+  --color-text-muted: #6A6284;
+  --color-primary: #7C5CD6;
+  --color-on-primary: #F7F4FE;
+  --color-border: #DDD5EE;
+  --color-accent: #7C5CD6;
+  --color-danger: #C74A6B;
+}
+
+html[data-theme='contrast-dark'] {
+  --color-background: #000000;
+  --color-surface: #000000;
+  --color-surface-alt: #161616;
+  --color-text: #FFFFFF;
+  --color-text-muted: #C8C8C8;
+  --color-primary: #66A3FF;
+  --color-on-primary: #000000;
+  --color-border: #E6E6E6;
+  --color-accent: #66A3FF;
+  --color-danger: #FF7066;
+}
+
+/* Dark themes get flatter, deeper shadows. `data-mode` is set by the
+   index.html pre-paint script and by applyThemeVars. */
+:root[data-mode='dark'] {
   --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.02),
     0 24px 50px -28px rgba(0, 0, 0, 0.75);
   --shadow-soft: 0 18px 38px -26px rgba(0, 0, 0, 0.7);
@@ -280,4 +355,32 @@ h3 {
 
 .spin {
   animation: spin 1s linear infinite;
+}
+
+/* --- Animated theme switching --- */
+
+/* View Transitions path: a slightly longer, eased cross-fade. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 380ms;
+  animation-timing-function: ease-in-out;
+}
+
+/* Fallback path: briefly let every surface transition its colors while the
+   root CSS variables change (class added/removed by transitionThemeVars). */
+html.theme-transition,
+html.theme-transition body,
+html.theme-transition * {
+  transition:
+    background-color 0.4s ease,
+    color 0.4s ease,
+    border-color 0.4s ease,
+    box-shadow 0.4s ease !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
 }

@@ -17,6 +17,7 @@ import { ReaderPanel, type PanelTab } from './reader/ReaderPanel'
 import { RecentPositionsMenu } from './reader/RecentPositionsMenu'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useTheme } from '@/theme/ThemeProvider'
+import { themeRegistry } from '@/theme/themeRegistry'
 import { bookSettingsRepository } from '@/storage/bookSettingsRepository'
 import { hapticTick } from '@/lib/native'
 import { Icon } from '@/ui/Icon'
@@ -253,7 +254,13 @@ export function ReaderScreen() {
   }
 
   const handleThemeToggle = () => {
-    setReading({ themeId: theme.mode === 'dark' ? 'daylight' : 'midnight' })
+    // Flip to the same family's other mode; explicit toggling overrides
+    // follow-system so the choice sticks.
+    const counterpart = themeRegistry.getCounterpart(theme)
+    setReading({
+      themeId: counterpart?.id ?? (theme.mode === 'dark' ? 'daylight' : 'midnight'),
+      followSystemTheme: false,
+    })
   }
 
   const openTts = () => {

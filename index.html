@@ -10,44 +10,70 @@
     <meta name="theme-color" content="#F7F8FA" />
     <script>
       (function () {
-        var DARK = ['midnight', 'carbon', 'nord', 'forest', 'dusk']
+        var DARK = ['midnight', 'carbon', 'nord', 'forest', 'dusk',
+          'ember', 'solarized-dark', 'contrast-dark']
         var BG = {
           daylight: '#F7F8FA', sepia: '#EFE6D6', midnight: '#14181F',
           carbon: '#000000', solarized: '#FDF6E3', nord: '#2E3440',
           contrast: '#FFFFFF', forest: '#121A14', dusk: '#181527', 'e-ink': '#EDEDEA',
+          ember: '#211A13', 'solarized-dark': '#002B36', frost: '#E5E9F0',
+          meadow: '#F1F5EC', lilac: '#F3F0FA', 'contrast-dark': '#000000',
+        }
+        // Light/dark counterpart within each theme family, for follow-system.
+        var PAIR = {
+          daylight: 'midnight', midnight: 'daylight',
+          sepia: 'ember', ember: 'sepia',
+          solarized: 'solarized-dark', 'solarized-dark': 'solarized',
+          frost: 'nord', nord: 'frost',
+          meadow: 'forest', forest: 'meadow',
+          lilac: 'dusk', dusk: 'lilac',
+          'e-ink': 'carbon', carbon: 'e-ink',
+          contrast: 'contrast-dark', 'contrast-dark': 'contrast',
         }
         var root = document.documentElement
         var meta = document.querySelector('meta[name="theme-color"]')
+        var systemDark = window.matchMedia &&
+          window.matchMedia('(prefers-color-scheme: dark)').matches
+        function isDark(id) { return DARK.indexOf(id) !== -1 }
         function paint(id, bg, dark) {
           if (id) root.setAttribute('data-theme', id)
+          root.setAttribute('data-mode', dark ? 'dark' : 'light')
           root.style.colorScheme = dark ? 'dark' : 'light'
           if (meta && bg) meta.setAttribute('content', bg)
+        }
+        // Settings persisted by @capacitor/preferences (web localStorage uses
+        // a CapacitorStorage. key prefix) — read for follow-system preference.
+        var settings = null
+        try {
+          var raw = localStorage.getItem('CapacitorStorage.lumen.settings.v1')
+          if (raw) settings = JSON.parse(raw)
+        } catch (_) {}
+        var follow = !!(settings && settings.reading && settings.reading.followSystemTheme)
+        function resolve(id) {
+          if (follow && id && PAIR[id] && isDark(id) !== systemDark) return PAIR[id]
+          return id
         }
         // 1) Hint written by the app on every theme change (works on web and
         //    in the native WebView, where settings live outside localStorage).
         try {
           var hint = JSON.parse(localStorage.getItem('lumen.theme.hint'))
           if (hint && hint.bg && hint.scheme) {
-            paint(hint.id, hint.bg, hint.scheme === 'dark')
+            var hid = resolve(hint.id)
+            if (hid !== hint.id && BG[hid]) {
+              paint(hid, BG[hid], isDark(hid))
+            } else {
+              paint(hint.id, hint.bg, hint.scheme === 'dark')
+            }
             return
           }
         } catch (_) {}
-        // 2) Settings persisted by @capacitor/preferences (web localStorage
-        //    uses a CapacitorStorage. key prefix).
-        var id = null
-        try {
-          var raw = localStorage.getItem('CapacitorStorage.lumen.settings.v1')
-          if (raw) {
-            var s = JSON.parse(raw)
-            id = (s && s.reading && s.reading.themeId) || null
-          }
-        } catch (_) {}
+        // 2) Theme id from persisted settings.
+        var id = resolve(
+          (settings && settings.reading && settings.reading.themeId) || null,
+        )
         // 3) OS preference.
-        if (!id) {
-          id = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-            ? 'midnight' : 'daylight'
-        }
-        paint(id, BG[id] || '#F7F8FA', DARK.indexOf(id) !== -1)
+        if (!id) id = systemDark ? 'midnight' : 'daylight'
+        paint(id, BG[id] || '#F7F8FA', isDark(id))
       })()
     </script>
     <!-- Brand/UI fonts are bundled and self-hosted (see src/theme/uiFonts.ts):

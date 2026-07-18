@@ -1,5 +1,14 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import {
+  BookOpen,
+  Brain,
+  DatabaseBackup,
+  Palette,
+  PanelBottom,
+  Type,
+  Volume2,
+} from 'lucide-react'
 import { useTheme } from '@/theme/ThemeProvider'
 import { useSettingsStore } from '@/store/settingsStore'
 import { listTtsEngines } from '@/tts/registry'
@@ -17,11 +26,13 @@ import { Slider } from '@/ui/Slider'
 import { Icon } from '@/ui/Icon'
 import { icons } from '@/ui/icons'
 import { SupertonicDownload } from './settings/SupertonicDownload'
+import { SettingSection } from './settings/SettingSection'
+import { ThemePicker } from './settings/ThemePicker'
 import { ALL_ACTION_META } from './reader/ReaderActionBar'
 
 export function SettingsScreen() {
   const navigate = useNavigate()
-  const { theme, font, themes, fonts } = useTheme()
+  const { font, fonts } = useTheme()
   const reading = useSettingsStore((s) => s.reading)
   const tts = useSettingsStore((s) => s.tts)
   const setReading = useSettingsStore((s) => s.setReading)
@@ -70,37 +81,38 @@ export function SettingsScreen() {
         <h1>Settings</h1>
       </header>
 
-      <main className="screen-body">
-        <section className="settings-section">
-          <h2>Theme</h2>
-          <div className="theme-grid">
-            {themes.map((t) => (
-              <button
-                key={t.id}
-                className={`theme-chip ${t.id === theme.id ? 'active' : ''}`}
-                onClick={() => setReading({ themeId: t.id })}
-                aria-pressed={t.id === theme.id}
-              >
-                <span
-                  className="preview"
-                  style={{
-                    background: t.tokens.reader.pageBackground,
-                    color: t.tokens.reader.pageText,
-                  }}
-                >
-                  <span className="preview-aa">Aa</span>
-                </span>
-                <span className="theme-chip-name">
-                  {t.name}
-                  <span className="theme-chip-mode">{t.mode}</span>
-                </span>
-              </button>
-            ))}
-          </div>
-        </section>
+      <main className="screen-body settings-body">
+        <SettingSection
+          icon={<Palette size={18} />}
+          title="Appearance"
+          hint="Theme, color mode and screen comfort."
+        >
+          <ThemePicker />
+          <Slider
+            label="Brightness"
+            min={0.4}
+            max={1}
+            step={0.05}
+            value={reading.brightness}
+            onChange={(brightness) => setReading({ brightness })}
+            formatValue={(v) => `${Math.round(v * 100)}%`}
+          />
+          <Slider
+            label="Warmth"
+            min={0}
+            max={1}
+            step={0.05}
+            value={reading.warmth}
+            onChange={(warmth) => setReading({ warmth })}
+            formatValue={(v) => `${Math.round(v * 100)}%`}
+          />
+        </SettingSection>
 
-        <section className="settings-section">
-          <h2>Font</h2>
+        <SettingSection
+          icon={<Type size={18} />}
+          title="Typography"
+          hint="How the text on the page looks."
+        >
           <div className="font-options">
             {fonts.map((f) => (
               <button
@@ -113,10 +125,6 @@ export function SettingsScreen() {
               </button>
             ))}
           </div>
-        </section>
-
-        <section className="settings-section">
-          <h2>Reading</h2>
           <Slider
             label="Font size"
             min={0.8}
@@ -145,27 +153,29 @@ export function SettingsScreen() {
             formatValue={(v) => `${v}px`}
           />
           <Slider
-            label="Brightness"
-            min={0.4}
-            max={1}
-            step={0.05}
-            value={reading.brightness}
-            onChange={(brightness) => setReading({ brightness })}
-            formatValue={(v) => `${Math.round(v * 100)}%`}
-          />
-          <Slider
-            label="Warmth"
+            label="Letter spacing"
             min={0}
-            max={1}
-            step={0.05}
-            value={reading.warmth}
-            onChange={(warmth) => setReading({ warmth })}
-            formatValue={(v) => `${Math.round(v * 100)}%`}
+            max={0.2}
+            step={0.01}
+            value={reading.letterSpacing}
+            onChange={(letterSpacing) => setReading({ letterSpacing })}
+            formatValue={(v) => `${v.toFixed(2)}em`}
           />
-        </section>
+          <div className="setting-row">
+            <span>Justify text</span>
+            <Toggle
+              ariaLabel="Justify text"
+              checked={reading.justify}
+              onChange={(justify) => setReading({ justify })}
+            />
+          </div>
+        </SettingSection>
 
-        <section className="settings-section">
-          <h2>Layout</h2>
+        <SettingSection
+          icon={<BookOpen size={18} />}
+          title="Page & navigation"
+          hint="How you move through a book."
+        >
           <div className="setting-row">
             <span>Reading mode</span>
             <div className="font-options">
@@ -182,14 +192,6 @@ export function SettingsScreen() {
                 Continuous scroll
               </button>
             </div>
-          </div>
-          <div className="setting-row">
-            <span>Justify text</span>
-            <Toggle
-              ariaLabel="Justify text"
-              checked={reading.justify}
-              onChange={(justify) => setReading({ justify })}
-            />
           </div>
           <div className="setting-row">
             <span>Large tap zones</span>
@@ -220,10 +222,13 @@ export function SettingsScreen() {
             onChange={(autoScrollSpeed) => setReading({ autoScrollSpeed })}
             formatValue={(v) => `${v} px/s`}
           />
-        </section>
+        </SettingSection>
 
-        <section className="settings-section">
-          <h2>Focus &amp; ADHD</h2>
+        <SettingSection
+          icon={<Brain size={18} />}
+          title="Focus & accessibility"
+          hint="Reading aids for concentration and comfort."
+        >
           <div className="setting-row">
             <span>
               Bionic reading
@@ -249,15 +254,6 @@ export function SettingsScreen() {
               formatValue={(v) => `${Math.round(v * 100)}%`}
             />
           )}
-          <Slider
-            label="Letter spacing"
-            min={0}
-            max={0.2}
-            step={0.01}
-            value={reading.letterSpacing}
-            onChange={(letterSpacing) => setReading({ letterSpacing })}
-            formatValue={(v) => `${v.toFixed(2)}em`}
-          />
           <div className="setting-row">
             <span>Hide inline images</span>
             <Toggle
@@ -278,10 +274,13 @@ export function SettingsScreen() {
               onChange={(softWrap) => setReading({ softWrap })}
             />
           </div>
-        </section>
+        </SettingSection>
 
-        <section className="settings-section">
-          <h2>Speech (Text to Speech)</h2>
+        <SettingSection
+          icon={<Volume2 size={18} />}
+          title="Listening"
+          hint="Text-to-speech engine and narration."
+        >
           <div className="setting-row">
             <span>Engine</span>
             <Select
@@ -344,13 +343,13 @@ export function SettingsScreen() {
             />
           </div>
           <SupertonicDownload />
-        </section>
+        </SettingSection>
 
-        <section className="settings-section">
-          <h2>Reader footer</h2>
-          <p className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
-            Choose which actions appear in the reader toolbar.
-          </p>
+        <SettingSection
+          icon={<PanelBottom size={18} />}
+          title="Reader toolbar"
+          hint="Choose which actions appear in the reader footer."
+        >
           {ALL_ACTION_META.map((action) => {
             const checked = reading.footerActionIds.includes(action.id)
             const toggle = () => {
@@ -372,10 +371,13 @@ export function SettingsScreen() {
               </div>
             )
           })}
-        </section>
+        </SettingSection>
 
-        <section className="settings-section">
-          <h2>Data & backup</h2>
+        <SettingSection
+          icon={<DatabaseBackup size={18} />}
+          title="Data & backup"
+          hint="Backups include books, progress, bookmarks, highlights and shelves."
+        >
           <div className="setting-row">
             <span>Export library</span>
             <button className="btn" onClick={() => void doExport()} disabled={!!busy}>
@@ -402,10 +404,7 @@ export function SettingsScreen() {
               }}
             />
           </div>
-          <p className="muted" style={{ fontSize: 12 }}>
-            Backups include books, progress, bookmarks, highlights and shelves.
-          </p>
-        </section>
+        </SettingSection>
       </main>
     </div>
   )

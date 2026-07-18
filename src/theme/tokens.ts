@@ -62,7 +62,23 @@ export interface Theme {
   /** Human label shown in settings. */
   readonly name: string
   readonly mode: ThemeMode
+  /**
+   * Family id grouping a light theme with its dark counterpart (e.g. Daylight
+   * and Midnight are both family `lumen`). Each family has exactly one theme
+   * per mode, which powers the light/dark toggle and the paired theme picker.
+   */
+  readonly family: string
+  /** Human label for the family (shown once for the light/dark pair). */
+  readonly familyName: string
   readonly tokens: ThemeTokens
+}
+
+/** A light/dark pair of themes sharing one visual identity. */
+export interface ThemeFamily {
+  readonly id: string
+  readonly name: string
+  readonly light: Theme
+  readonly dark: Theme
 }
 
 /**
