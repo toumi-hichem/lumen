@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { computeReadingSpeed, computeStats } from './readingStats'
+import {
+  computeBookTimes,
+  computeReadingSpeed,
+  computeStats,
+  parseDateKey,
+} from './readingStats'
 import type { ReadingSession } from '@/domain/models'
 
 const DAY = 86_400_000
@@ -46,6 +51,87 @@ describe('computeStats', () => {
   it('still counts a streak from yesterday when nothing read today', () => {
     const stats = computeStats([session(now - DAY, 10), session(now - 2 * DAY, 10)], now)
     expect(stats.currentStreak).toBe(2)
+  })
+
+  it('returns zeroed enriched fields for no sessions', () => {
+    const stats = computeStats([], now)
+    expect(stats.longestStreak).toBe(0)
+    expect(stats.todayMinutes).toBe(0)
+    expect(stats.avgSessionMinutes).toBe(0)
+    expect(stats.activeDays).toBe(0)
+    expect(stats.bestDay).toBeNull()
+    expect(stats.last84Days).toHaveLength(84)
+  })
+
+  it('reports minutes read today and the average session length', () => {
+    const stats = computeStats(
+      [session(now, 30), session(now, 10), session(now - 2 * DAY, 20)],
+      now,
+    )
+    expect(stats.todayMinutes).toBe(40)
+    expect(stats.avgSessionMinutes).toBe(20)
+    expect(stats.activeDays).toBe(2)
+  })
+
+  it('finds the longest historical streak across gaps', () => {
+    // A 5-day run ending 10 days ago beats the current 2-day run.
+    const stats = computeStats(
+      [
+        ...[10, 11, 12, 13, 14].map((d) => session(now - d * DAY, 10)),
+        session(now, 10),
+        session(now - DAY, 10),
+      ],
+      now,
+    )
+    expect(stats.longestStreak).toBe(5)
+    expect(stats.currentStreak).toBe(2)
+  })
+
+  it('reports the best day', () => {
+    const stats = computeStats([session(now - 3 * DAY, 90), session(now - DAY, 25)], now)
+    expect(stats.bestDay?.minutes).toBe(90)
+  })
+
+  it('orders daily ranges oldest first, ending today', () => {
+    const stats = computeStats([session(now, 5)], now)
+    expect(stats.last7Days[6].minutes).toBe(5)
+    expect(stats.last84Days[83].minutes).toBe(5)
+    expect(stats.last84Days[0].date < stats.last84Days[83].date).toBe(true)
+  })
+})
+
+describe('computeBookTimes', () => {
+  const now = new Date('2026-06-15T12:00:00').getTime()
+
+  function bookSession(bookId: string, startedAt: number, minutes: number): ReadingSession {
+    return { ...session(startedAt, minutes), id: `${bookId}-${startedAt}`, bookId }
+  }
+
+  it('aggregates per book and sorts most-read first', () => {
+    const times = computeBookTimes([
+      bookSession('a', now, 10),
+      bookSession('b', now - DAY, 30),
+      bookSession('a', now - 2 * DAY, 15),
+    ])
+    expect(times.map((t) => t.bookId)).toEqual(['b', 'a'])
+    expect(times[1].minutes).toBe(25)
+    expect(times[1].sessions).toBe(2)
+  })
+
+  it('tracks the most recent read per book', () => {
+    const older = bookSession('a', now - 5 * DAY, 10)
+    const newer = bookSession('a', now - DAY, 10)
+    const [time] = computeBookTimes([older, newer])
+    expect(time.lastReadAt).toBe(newer.endedAt)
+  })
+})
+
+describe('parseDateKey', () => {
+  it('round-trips a local date key', () => {
+    const date = parseDateKey('2026-07-18')
+    expect(date.getFullYear()).toBe(2026)
+    expect(date.getMonth()).toBe(6)
+    expect(date.getDate()).toBe(18)
   })
 })
 
