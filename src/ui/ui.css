@@ -65,6 +65,16 @@
   padding-bottom: calc(16px + env(safe-area-inset-bottom));
   width: 100%;
   max-width: 100%;
+  /* Gentle rise-in when a screen mounts (route changes feel intentional,
+     not abrupt). Disabled by the global reduced-motion rule above. */
+  animation: screen-in 0.22s ease;
+}
+
+@keyframes screen-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
 }
 
 /* Wide content (long titles, code, preformatted blocks) must never push the
@@ -267,6 +277,16 @@
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+@media (hover: hover) {
+  .book-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-card);
+  }
+}
+.book-card:active {
+  transform: scale(0.98);
 }
 
 .book-cover {
@@ -1596,6 +1616,10 @@
   background: var(--color-surface);
   color: var(--color-text);
   font-size: 14px;
+  transition: border-color 0.18s ease, color 0.18s ease, transform 0.12s ease;
+}
+.chip:active {
+  transform: scale(0.95);
 }
 .chip.active {
   border-color: var(--color-primary);
