@@ -113,6 +113,8 @@ export function useReader(bookId: string, onTap?: () => void): ReaderApi {
   const engineRef = useRef<BookEngine | null>(null)
   const containerEl = useRef<HTMLDivElement | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  /** The debounced progress write that hasn't run yet (flushed on unmount). */
+  const pendingSave = useRef<{ id: string; loc: BookLocationInfo } | null>(null)
   const sessionStart = useRef(0)
   const sessionBookId = useRef('')
   const markedFinished = useRef(false)
@@ -165,11 +167,14 @@ export function useReader(bookId: string, onTap?: () => void): ReaderApi {
     }
 
     // Flush when the app is backgrounded or the page is being torn down, so a
-    // process kill doesn't lose the session. On return, restart the clock so
-    // time spent hidden is not counted as reading.
+    // process kill doesn't lose the session. The clock is stopped entirely
+    // while hidden (not just restarted) so that closing the tab/app straight
+    // from the background can never record hidden time as reading.
     const onVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') flushSession()
-      else if (sessionStart.current) {
+      if (document.visibilityState === 'hidden') {
+        flushSession()
+        sessionStart.current = 0
+      } else if (sessionBookId.current) {
         sessionStart.current = Date.now()
         sessionStartProgress.current = latestProgress.current
       }
@@ -189,10 +194,12 @@ export function useReader(bookId: string, onTap?: () => void): ReaderApi {
         await engine.open(await blob.arrayBuffer())
         if (!active) return engine.destroy()
 
-        // Wait for the viewport to be in the DOM and fully laid out.
+        // Wait for the viewport to be in the DOM and fully laid out. Also
+        // resolves on unmount (`!active`) so the rAF poll can't leak forever
+        // when the screen closes before layout happens.
         await waitFor(() => {
           const el = containerEl.current
-          return el && el.clientHeight > 0 ? el : null
+          return !active || (el !== null && el.clientHeight > 0)
         })
         if (!active || !containerEl.current) return engine.destroy()
 
@@ -266,6 +273,17 @@ export function useReader(bookId: string, onTap?: () => void): ReaderApi {
     return () => {
       active = false
       clearTimeout(saveTimer.current)
+      // A debounced progress save may still be pending — write it now so
+      // leaving the reader right after a page turn can't lose the position.
+      if (pendingSave.current) {
+        const { id, loc } = pendingSave.current
+        pendingSave.current = null
+        void progressRepository.save({
+          bookId: id,
+          location: loc,
+          updatedAt: Date.now(),
+        })
+      }
       document.removeEventListener('visibilitychange', onVisibilityChange)
       window.removeEventListener('pagehide', flushSession)
       // Record whatever accrued since the last flush (ignores short spans).
@@ -302,7 +320,9 @@ export function useReader(bookId: string, onTap?: () => void): ReaderApi {
 
   const scheduleSave = (id: string, loc: BookLocationInfo) => {
     clearTimeout(saveTimer.current)
+    pendingSave.current = { id, loc }
     saveTimer.current = setTimeout(() => {
+      pendingSave.current = null
       void progressRepository.save({
         bookId: id,
         location: loc,

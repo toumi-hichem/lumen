@@ -44,11 +44,37 @@ function onnxruntimeWasm(): Plugin {
   }
 }
 
+/**
+ * foliate-js (pinned commit) schedules async callbacks in paginator.js that
+ * dereference `this.#view` without a null check; rapid navigation or theme
+ * changes can land those callbacks after the view is torn down, throwing
+ * "Cannot read properties of null (reading 'document')". Null-guard the two
+ * offending callbacks at serve/build time until it's fixed upstream.
+ */
+function foliatePaginatorNullGuard(): Plugin {
+  return {
+    name: 'foliate-paginator-null-guard',
+    transform(code, id) {
+      if (!id.includes('foliate-js/paginator.js')) return
+      return code
+        .replace(
+          /requestAnimationFrame\(\(\)\s*=>\s*this\.#background\.style\.background = getBackground\(this\.#view\.document\)\)/,
+          'requestAnimationFrame(() => { if (this.#view?.document) this.#background.style.background = getBackground(this.#view.document) })',
+        )
+        .replace(
+          /\.then\(\(\) => this\.#view\.expand\(\)\)/,
+          '.then(() => this.#view?.expand())',
+        )
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     react(),
     onnxruntimeWasm(),
+    foliatePaginatorNullGuard(),
     VitePWA({
       // injectManifest (not generateSW) so our own service worker can add the
       // COOP/COEP/CORP headers that make the WebView cross-origin isolated,

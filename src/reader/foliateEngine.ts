@@ -456,13 +456,23 @@ export class FoliateEngine implements BookEngine {
 
   destroy(): void {
     clearTimeout(this.pendingTap)
-    this.view?.close()
-    this.view?.remove()
+    const view = this.view
+    const book = this.book
     this.view = null
-    this.book?.destroy?.()
     this.book = null
     this.container = null
     this.highlights.clear()
+    // foliate's paginator schedules rAF work (setStyles repaints the page
+    // background on the next frame) that dereferences the view's document.
+    // Closing one frame later lets any queued callback run against a live
+    // view instead of throwing on teardown during quick navigation.
+    const close = () => {
+      view?.close()
+      view?.remove()
+      book?.destroy?.()
+    }
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(close)
+    else close()
   }
 
   // --- internals ---
