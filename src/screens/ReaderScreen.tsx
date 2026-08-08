@@ -33,8 +33,9 @@ import { Icon } from '@/ui/Icon'
 import { icons } from '@/ui/icons'
 import { ArrowLeft } from 'lucide-react'
 
-/** How much of the screen one volume press moves in continuous flow. */
-const VOLUME_SCROLL_FRACTION = 0.8
+/** How much of the screen one volume press moves in continuous flow: a page,
+ *  less a sliver of overlap so the line being read stays in view. */
+const VOLUME_SCROLL_FRACTION = 0.85
 
 export function ReaderScreen() {
   const { bookId = '' } = useParams()
@@ -320,8 +321,8 @@ export function ReaderScreen() {
     enabled: volumeKeysEnabled,
     onPress: ({ direction, repeat }) => {
       if (continuous) {
-        // Most of a screen per press, ramped up and down so the eye keeps its
-        // place instead of having to find it again after a jump.
+        // One page per press, ramped up and down so the eye keeps its place
+        // instead of having to find it again after a jump.
         const step = window.innerHeight * VOLUME_SCROLL_FRACTION
         volumeScroller.scrollBy(direction === 'down' ? step : -step)
         return

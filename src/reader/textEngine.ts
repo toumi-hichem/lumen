@@ -41,6 +41,9 @@ export class TextEngine implements BookEngine {
   private asHtml = false
   private bionic = { enabled: false, strength: 0.5 }
   private scrollRaf = 0
+  /** Throttle state for location updates during pixel scrolling. */
+  private lastPixelEmit = 0
+  private pixelEmitTimer: ReturnType<typeof setTimeout> | undefined
 
   async open(data: ArrayBuffer): Promise<void> {
     this.text = new TextDecoder('utf-8').decode(data)
@@ -171,7 +174,20 @@ export class TextEngine implements BookEngine {
   scrollByPixels(px: number): void {
     if (!this.container) return
     this.container.scrollTop += px
-    this.emitLocation()
+    // Pixel scrolling runs a frame at a time (auto-scroll, volume keys), and a
+    // location update per frame means a React render per frame, which shows up
+    // as stutter in the motion. Report a few times a second instead, plus once
+    // more when the scrolling stops so the saved position is exact.
+    const now = Date.now()
+    if (now - this.lastPixelEmit >= 200) {
+      this.lastPixelEmit = now
+      this.emitLocation()
+    }
+    clearTimeout(this.pixelEmitTimer)
+    this.pixelEmitTimer = setTimeout(() => {
+      this.lastPixelEmit = Date.now()
+      this.emitLocation()
+    }, 200)
   }
 
   async search(query: string, limit = 100): Promise<SearchHit[]> {
@@ -300,6 +316,7 @@ export class TextEngine implements BookEngine {
   destroy(): void {
     if (this.scrollRaf) cancelAnimationFrame(this.scrollRaf)
     this.scrollRaf = 0
+    clearTimeout(this.pixelEmitTimer)
     this.container?.removeEventListener('scroll', this.handleScroll)
     this.container?.removeEventListener('click', this.handleTap)
     this.content?.removeEventListener('mouseup', this.handleSelection)

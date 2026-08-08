@@ -40,8 +40,16 @@ describe('createSmoothScroller', () => {
     const h = harness()
     h.scroller.scrollBy(600)
     h.runFrames()
-    expect(h.total()).toBeCloseTo(600, 1)
+    expect(h.total()).toBe(600)
     expect(h.scroller.isScrolling()).toBe(false)
+  })
+
+  it('only ever writes whole pixels', () => {
+    const h = harness()
+    h.scroller.scrollBy(613)
+    h.runFrames()
+    for (const px of h.moves) expect(Number.isInteger(px)).toBe(true)
+    expect(h.total()).toBe(613)
   })
 
   it('accelerates then decelerates instead of jumping', () => {
@@ -75,14 +83,14 @@ describe('createSmoothScroller', () => {
     expect(h.scroller.isScrolling()).toBe(true)
     h.scroller.scrollBy(600)
     h.runFrames()
-    expect(h.total()).toBeCloseTo(1200, 1)
+    expect(h.total()).toBe(1200)
   })
 
   it('caps how much distance held presses can queue', () => {
     const h = harness({ maxPendingRatio: 2 })
     for (let i = 0; i < 10; i++) h.scroller.scrollBy(300)
     h.runFrames()
-    expect(h.total()).toBeCloseTo(600, 1)
+    expect(h.total()).toBe(600)
   })
 
   it('abandons the remaining distance when the direction reverses', () => {
@@ -92,7 +100,7 @@ describe('createSmoothScroller', () => {
     const forward = h.total()
     h.scroller.scrollBy(-600)
     h.runFrames()
-    expect(h.total() - forward).toBeCloseTo(-600, 1)
+    expect(h.total() - forward).toBe(-600)
   })
 
   it('drops queued distance on cancel', () => {

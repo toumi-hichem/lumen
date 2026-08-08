@@ -76,6 +76,11 @@ export class FoliateEngine implements BookEngine {
   private pendingTap: ReturnType<typeof setTimeout> | undefined
   /** Bumped per search() call; a stale generation aborts its scan loop. */
   private searchGeneration = 0
+  /** Cached scroll container for continuous flow, keyed by section index. */
+  private scrollHost: { index: number; el: HTMLElement } | null = null
+  /** Cooldown after a section hand-off, so queued scroll deltas arriving in
+   *  the same trip can't skip through several sections at once. */
+  private sectionHandoffUntil = 0
 
   constructor(format: BookFormat = 'epub') {
     this.format = format
@@ -176,20 +181,49 @@ export class FoliateEngine implements BookEngine {
   }
 
   /**
-   * Scroll continuous flow by a pixel delta. Foliate's paginator clamps to the
-   * current section, so a delta that lands on a boundary is handed to section
-   * navigation instead of being silently dropped.
+   * Scroll continuous flow by a pixel delta. The paginator's own scrollBy()
+   * clamps to one screen either side of its last anchor, which stalls a longer
+   * run, so the section's scroll container is moved directly. Reaching the top
+   * or bottom of the section hands off to section navigation.
    */
   scrollByPixels(px: number): void {
-    const renderer = this.view?.renderer
-    if (!renderer?.scrollBy || this.flow !== 'scrolled' || !px) return
-    const before = renderer.start ?? 0
-    renderer.scrollBy(0, px)
-    const moved = Math.abs((renderer.start ?? 0) - before)
-    if (moved < 0.5) {
-      if (px > 0) void this.view?.next()
-      else void this.view?.prev()
+    if (this.flow !== 'scrolled' || !px) return
+    const el = this.scrollContainer()
+    if (!el) return
+    const max = el.scrollHeight - el.clientHeight
+    const before = el.scrollTop
+    const next = Math.max(0, Math.min(max, before + px))
+    if (Math.abs(next - before) > 0.01) {
+      el.scrollTop = next
+      return
     }
+    if (Date.now() < this.sectionHandoffUntil) return
+    this.sectionHandoffUntil = Date.now() + 600
+    if (px > 0) void this.view?.next()
+    else void this.view?.prev()
+  }
+
+  /**
+   * The element that scrolls the current section. It lives in the paginator's
+   * closed shadow root, so it is reached from the content iframe (which the
+   * renderer does expose) by walking up to the first scrollable ancestor.
+   */
+  private scrollContainer(): HTMLElement | null {
+    const cached = this.scrollHost
+    if (cached && cached.index === this.lastSectionIndex && cached.el.isConnected) {
+      return cached.el
+    }
+    const doc = this.view?.renderer.getContents()[0]?.doc
+    const frame = doc?.defaultView?.frameElement as HTMLElement | null | undefined
+    let el = frame?.parentElement ?? null
+    while (el) {
+      if (el.scrollHeight > el.clientHeight + 1) {
+        this.scrollHost = { index: this.lastSectionIndex, el }
+        return el
+      }
+      el = el.parentElement
+    }
+    return null
   }
 
   setFlow(flow: 'paginated' | 'scrolled'): void {

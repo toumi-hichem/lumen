@@ -30,9 +30,9 @@ export interface SmoothScrollOptions {
   cancelScheduled?: (handle: number) => void
 }
 
-const DEFAULT_ACCEL = 5000
-const DEFAULT_MAX_SPEED = 1400
-const DEFAULT_MAX_PENDING_RATIO = 3
+const DEFAULT_ACCEL = 2600
+const DEFAULT_MAX_SPEED = 1100
+const DEFAULT_MAX_PENDING_RATIO = 2
 /** Below this the trip is over; sub-pixel remainders are not worth a frame. */
 const EPSILON = 0.5
 /** Clamp long frame gaps (backgrounded tab) so nothing lurches on return. */
@@ -53,12 +53,16 @@ export function createSmoothScroller(
   let speed = 0
   let handle: number | null = null
   let last = 0
+  /** Sub-pixel debt: only whole pixels are handed to the scroll target, since
+   *  a fractional scrollTop can be rounded away and lose the motion. */
+  let carry = 0
 
   const stop = () => {
     if (handle !== null) cancelScheduled(handle)
     handle = null
     remaining = 0
     speed = 0
+    carry = 0
   }
 
   const step = (time: number) => {
@@ -76,8 +80,16 @@ export function createSmoothScroller(
         : Math.max(targetSpeed, speed - accel * dt)
     const move = Math.min(distance, speed * dt)
     remaining -= direction * move
-    if (move > 0) scrollBy(direction * move)
+    carry += direction * move
+    const whole = Math.trunc(carry)
+    if (whole !== 0) {
+      carry -= whole
+      scrollBy(whole)
+    }
     if (Math.abs(remaining) < EPSILON) {
+      // Hand over the last fraction so the trip lands on its target.
+      const rest = Math.round(carry)
+      if (rest !== 0) scrollBy(rest)
       stop()
       return
     }
@@ -92,6 +104,7 @@ export function createSmoothScroller(
         // from it, and start the new direction from a standstill.
         remaining = distance
         speed = 0
+        carry = 0
       } else {
         const cap = Math.abs(distance) * maxPendingRatio
         remaining = Math.sign(distance) * Math.min(Math.abs(remaining + distance), cap)
