@@ -11,6 +11,10 @@ export interface SpeakOptions {
   /** Pitch multiplier, 1 = normal (ignored by engines without pitch control). */
   pitch: number
   voiceId?: string
+  /** Shown in a native playback notification, if the engine has one. */
+  title?: string
+  /** Notification cover art (a data: URL); ignored by engines without one. */
+  coverUrl?: string
 }
 
 /**
@@ -84,12 +88,22 @@ export type TtsEngineNotice =
   | { type: 'model-loading' }
   | { type: 'model-ready'; elapsedMs: number }
   | { type: 'synthesizing'; index: number }
+  /** Chapter skip requested from a native control (notification, headset,
+   *  Android Auto) that the engine can't act on itself. */
+  | { type: 'skip'; direction: 'next' | 'prev' }
 
 /** Progress callbacks for engines that own full-queue playback natively. */
 export interface TtsQueueEvents {
   onChunk: (index: number) => void
   onComplete: () => void
   onError: (message: string) => void
+  /**
+   * Playback was paused/resumed by something other than the controller's own
+   * pauseQueue()/resumeQueue() — a tap on the native notification, a headset
+   * button, or the OS reclaiming audio focus. Lets the controller reconcile
+   * its status instead of drifting out of sync with what's actually playing.
+   */
+  onExternalStateChange?: (playing: boolean) => void
 }
 
 export interface TtsEngineDescriptor {

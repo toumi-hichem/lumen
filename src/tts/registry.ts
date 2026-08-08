@@ -3,9 +3,13 @@ import { platform } from '@/lib/platform'
 import { WebSpeechEngine } from './webSpeechEngine'
 import { SupertonicEngine } from './supertonicEngine'
 import { SupertonicNativeEngine } from './supertonicNativeEngine'
+import { KokoroEngine } from './kokoroEngine'
+import { KokoroNativeEngine } from './kokoroNativeEngine'
 import { NativeTtsEngine } from './nativeTtsEngine'
 import { hasNativeSupertonic } from './supertonic/nativeBridge'
 import { isSupertonicInstalled } from './supertonic/install'
+import { hasNativeKokoro } from './kokoro/nativeBridge'
+import { isKokoroInstalled } from './kokoro/install'
 import type { TtsEngine, TtsEngineDescriptor } from './types'
 
 type EngineFactory = () => TtsEngine
@@ -61,6 +65,17 @@ registerTtsEngine({
     hasNativeSupertonic() ? new SupertonicNativeEngine() : new SupertonicEngine(),
   available: () => hasNativeSupertonic() || typeof WebAssembly !== 'undefined',
   assetsReady: () => isSupertonicInstalled(),
+})
+
+registerTtsEngine({
+  id: 'kokoro',
+  name: 'Kokoro (on-device)',
+  requiresAssets: true,
+  // Same native/web split as Supertonic: native onnxruntime-android in a
+  // foreground service on Android, the WASM engine in a worker on the web.
+  factory: () => (hasNativeKokoro() ? new KokoroNativeEngine() : new KokoroEngine()),
+  available: () => hasNativeKokoro() || typeof WebAssembly !== 'undefined',
+  assetsReady: () => isKokoroInstalled(),
 })
 
 export const DEFAULT_ENGINE_ID = 'web-speech'

@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { TtsController, type TtsStatus } from '@/tts/controller'
 import { listTtsEngines } from '@/tts/registry'
 import { setMediaPlaybackState, setupMediaSession, updateMediaSessionLine } from '@/tts/mediaSession'
+import { renderCoverPlaceholder } from '@/lib/coverPlaceholder'
 import { useSettingsStore } from '@/store/settingsStore'
 import type { SpeakableChunk } from '@/reader/types'
 
@@ -41,6 +42,11 @@ export interface ReaderTtsApi {
   setSleepTimer: (minutes: number | null) => void
 }
 
+/** A data: URL declares its own MIME type; artwork objects want it explicit. */
+function coverMimeType(dataUrl: string): string {
+  return /^data:([^;,]+)/.exec(dataUrl)?.[1] ?? 'image/png'
+}
+
 /** React wrapper around the TtsController, bound to the user's TTS settings. */
 export function useTts(options: UseTtsOptions = {}): ReaderTtsApi {
   const tts = useSettingsStore((s) => s.tts)
@@ -67,6 +73,14 @@ export function useTts(options: UseTtsOptions = {}): ReaderTtsApi {
   onNextRef.current = options.onNext
   const onPrevRef = useRef(options.onPrev)
   onPrevRef.current = options.onPrev
+
+  // The native notification's cover art always shows something: the book's
+  // own cover, or (missing one) the same gradient placeholder the library
+  // grid shows for that title, rendered to a bitmap.
+  const effectiveCoverUrl = useMemo(() => {
+    if (options.coverUrl) return options.coverUrl
+    return options.bookTitle ? renderCoverPlaceholder(options.bookTitle) : undefined
+  }, [options.coverUrl, options.bookTitle])
 
   const controllerRef = useRef<TtsController | null>(null)
   if (controllerRef.current == null) {
@@ -101,8 +115,11 @@ export function useTts(options: UseTtsOptions = {}): ReaderTtsApi {
           setModelState({ phase: 'loading' })
         } else if (notice.type === 'model-ready') {
           setModelState({ phase: 'ready', loadMs: notice.elapsedMs })
-        } else {
+        } else if (notice.type === 'synthesizing') {
           setSynthesizingIndex(notice.index)
+        } else if (notice.type === 'skip') {
+          if (notice.direction === 'next') onNextRef.current?.()
+          else onPrevRef.current?.()
         }
       },
     })
@@ -113,8 +130,10 @@ export function useTts(options: UseTtsOptions = {}): ReaderTtsApi {
       rate: tts.rate,
       pitch: tts.pitch,
       voiceId: tts.voiceId,
+      title: options.bookTitle,
+      coverUrl: effectiveCoverUrl,
     })
-  }, [tts.rate, tts.pitch, tts.voiceId])
+  }, [tts.rate, tts.pitch, tts.voiceId, options.bookTitle, effectiveCoverUrl])
 
   // Pre-warm the engine from settings so play() doesn't fall back to web-speech.
   useEffect(() => {
@@ -137,8 +156,8 @@ export function useTts(options: UseTtsOptions = {}): ReaderTtsApi {
   useEffect(() => {
     const controller = controllerRef.current
     if (!controller) return
-    const artwork: MediaImage[] = options.coverUrl
-      ? [{ src: options.coverUrl, sizes: '256x256', type: 'image/jpeg' }]
+    const artwork: MediaImage[] = effectiveCoverUrl
+      ? [{ src: effectiveCoverUrl, sizes: '256x256', type: coverMimeType(effectiveCoverUrl) }]
       : []
     return setupMediaSession({
       title: options.bookTitle ?? 'Lumen',
@@ -151,7 +170,7 @@ export function useTts(options: UseTtsOptions = {}): ReaderTtsApi {
       onPrev: () => onPrevRef.current?.(),
     })
     // Re-register only when the displayed metadata changes, not on every render.
-  }, [options.bookTitle, options.author, options.coverUrl])
+  }, [options.bookTitle, options.author, effectiveCoverUrl])
 
   useEffect(() => {
     return () => {
@@ -172,7 +191,13 @@ export function useTts(options: UseTtsOptions = {}): ReaderTtsApi {
     setChunkIndex(clamped)
     void controllerRef.current?.play(
       next.map((c) => c.text),
-      { rate: tts.rate, pitch: tts.pitch, voiceId: tts.voiceId },
+      {
+        rate: tts.rate,
+        pitch: tts.pitch,
+        voiceId: tts.voiceId,
+        title: options.bookTitle,
+        coverUrl: effectiveCoverUrl,
+      },
       clamped,
     )
   }

@@ -46,6 +46,8 @@ export interface SupertonicNativePlugin {
     startIndex?: number
     lang?: string
     title?: string
+    /** Notification large-icon art, a data: URL. */
+    cover?: string
   }): Promise<void>
   pause(): Promise<void>
   resume(): Promise<void>
@@ -77,6 +79,10 @@ export interface SupertonicNativePlugin {
   addListener(
     eventName: 'synthesizing',
     listener: (data: { index: number }) => void,
+  ): Promise<PluginListenerHandle>
+  addListener(
+    eventName: 'skip',
+    listener: (data: { direction: 'next' | 'prev' }) => void,
   ): Promise<PluginListenerHandle>
   removeAllListeners(): Promise<void>
 }

@@ -8,6 +8,8 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioFormat;
@@ -20,6 +22,7 @@ import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.os.SystemClock;
+import android.util.Base64;
 import android.util.Log;
 
 import java.util.List;
@@ -52,6 +55,8 @@ public class SupertonicTtsService extends Service {
     static final String ACTION_PAUSE = "org.wikisubmission.lumen.tts.PAUSE";
     static final String ACTION_RESUME = "org.wikisubmission.lumen.tts.RESUME";
     static final String ACTION_STOP = "org.wikisubmission.lumen.tts.STOP";
+    static final String ACTION_SKIP_NEXT = "org.wikisubmission.lumen.tts.SKIP_NEXT";
+    static final String ACTION_SKIP_PREVIOUS = "org.wikisubmission.lumen.tts.SKIP_PREVIOUS";
 
     /** Progress callbacks, delivered on background threads. */
     interface Listener {
@@ -71,6 +76,15 @@ public class SupertonicTtsService extends Service {
 
         /** Synthesis of chunk `index` started (audio may still be queued). */
         void onSynthesizing(int index);
+
+        /**
+         * Skip requested from the notification, a headset/Bluetooth button, or
+         * Android Auto. The service has no chapter model, so it forwards the
+         * request instead of acting on it.
+         */
+        void onSkipNext();
+
+        void onSkipPrevious();
     }
 
     static final class Request {
@@ -81,8 +95,10 @@ public class SupertonicTtsService extends Service {
         final int startIndex;
         final String lang;
         final String title;
+        /** Notification large-icon art: a data: URL, or null for none. */
+        final String cover;
 
-        Request(List<String> chunks, String voiceId, float rate, int steps, int startIndex, String lang, String title) {
+        Request(List<String> chunks, String voiceId, float rate, int steps, int startIndex, String lang, String title, String cover) {
             this.chunks = chunks;
             this.voiceId = voiceId;
             this.rate = rate;
@@ -90,6 +106,7 @@ public class SupertonicTtsService extends Service {
             this.startIndex = startIndex;
             this.lang = lang;
             this.title = title;
+            this.cover = cover;
         }
     }
 
@@ -141,6 +158,8 @@ public class SupertonicTtsService extends Service {
     private Request request;
     /** Line shown in the notification: the sentence being spoken, or a status. */
     private volatile String currentLine;
+    /** Decoded once per queue start; reused by every notification rebuild. */
+    private Bitmap coverBitmap;
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -167,6 +186,16 @@ public class SupertonicTtsService extends Service {
             stopPlayback();
             return START_NOT_STICKY;
         }
+        if (ACTION_SKIP_NEXT.equals(action)) {
+            Listener l = listener;
+            if (l != null) l.onSkipNext();
+            return START_NOT_STICKY;
+        }
+        if (ACTION_SKIP_PREVIOUS.equals(action)) {
+            Listener l = listener;
+            if (l != null) l.onSkipPrevious();
+            return START_NOT_STICKY;
+        }
         if (ACTION_START.equals(action)) {
             Request req = pendingRequest;
             pendingRequest = null;
@@ -188,6 +217,7 @@ public class SupertonicTtsService extends Service {
         this.request = req;
         this.paused = false;
         this.currentLine = null;
+        this.coverBitmap = decodeCover(req.cover);
 
         createMediaSession();
         goForeground(true);
@@ -390,6 +420,7 @@ public class SupertonicTtsService extends Service {
         if (mediaSession != null) {
             mediaSession.setActive(false);
         }
+        coverBitmap = null;
         stopForeground(STOP_FOREGROUND_REMOVE);
         stopSelf();
     }
@@ -531,6 +562,18 @@ public class SupertonicTtsService extends Service {
                 public void onStop() {
                     stopPlayback();
                 }
+
+                @Override
+                public void onSkipToNext() {
+                    Listener l = listener;
+                    if (l != null) l.onSkipNext();
+                }
+
+                @Override
+                public void onSkipToPrevious() {
+                    Listener l = listener;
+                    if (l != null) l.onSkipPrevious();
+                }
             });
         }
         mediaSession.setActive(true);
@@ -541,7 +584,8 @@ public class SupertonicTtsService extends Service {
         if (mediaSession == null) return;
         mediaSession.setPlaybackState(new PlaybackState.Builder()
             .setActions(PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE
-                | PlaybackState.ACTION_PLAY_PAUSE | PlaybackState.ACTION_STOP)
+                | PlaybackState.ACTION_PLAY_PAUSE | PlaybackState.ACTION_STOP
+                | PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS)
             .setState(playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED, 0, 1f)
             .build());
     }
@@ -587,9 +631,11 @@ public class SupertonicTtsService extends Service {
             manager.createNotificationChannel(channel);
         }
 
-        PendingIntent playPause = servicePendingIntent(1, ACTION_PLAY_PAUSE);
-        PendingIntent stop = servicePendingIntent(2, ACTION_STOP);
-        PendingIntent open = PendingIntent.getActivity(this, 3,
+        PendingIntent skipPrevious = servicePendingIntent(1, ACTION_SKIP_PREVIOUS);
+        PendingIntent playPause = servicePendingIntent(2, ACTION_PLAY_PAUSE);
+        PendingIntent skipNext = servicePendingIntent(3, ACTION_SKIP_NEXT);
+        PendingIntent stop = servicePendingIntent(4, ACTION_STOP);
+        PendingIntent open = PendingIntent.getActivity(this, 5,
             getPackageManager().getLaunchIntentForPackage(getPackageName()),
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
@@ -599,19 +645,24 @@ public class SupertonicTtsService extends Service {
         String line = currentLine;
         builder
             .setSmallIcon(android.R.drawable.ic_media_play)
+            .setLargeIcon(coverBitmap)
             .setContentTitle(request != null && request.title != null ? request.title : "Reading aloud")
             .setContentText(line != null && !line.isEmpty() ? line : (playing ? "Playing" : "Paused"))
             .setContentIntent(open)
             .setOngoing(playing)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .addAction(new Notification.Action.Builder(
+                android.R.drawable.ic_media_previous, "Previous", skipPrevious).build())
+            .addAction(new Notification.Action.Builder(
                 android.R.drawable.ic_media_pause,
                 playing ? "Pause" : "Play", playPause).build())
+            .addAction(new Notification.Action.Builder(
+                android.R.drawable.ic_media_next, "Next", skipNext).build())
             .addAction(new Notification.Action.Builder(
                 android.R.drawable.ic_delete, "Stop", stop).build())
             .setStyle(new Notification.MediaStyle()
                 .setMediaSession(mediaSession.getSessionToken())
-                .setShowActionsInCompactView(0, 1));
+                .setShowActionsInCompactView(0, 1, 2));
         return builder.build();
     }
 
@@ -619,6 +670,33 @@ public class SupertonicTtsService extends Service {
         Intent intent = new Intent(this, SupertonicTtsService.class).setAction(action);
         return PendingIntent.getService(this, code, intent,
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+    }
+
+    /**
+     * Decode the book cover (a data: URL forwarded from JS) into a Bitmap
+     * sized for a notification's large icon. Downscaled because a cover can
+     * be a few megapixels and this only runs once per queue start, not per
+     * notification rebuild.
+     */
+    private static Bitmap decodeCover(String dataUrl) {
+        if (dataUrl == null) return null;
+        int comma = dataUrl.indexOf(',');
+        if (comma < 0) return null;
+        try {
+            byte[] bytes = Base64.decode(dataUrl.substring(comma + 1), Base64.DEFAULT);
+            Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+            if (bitmap == null) return null;
+            int maxSize = 512;
+            int width = bitmap.getWidth();
+            int height = bitmap.getHeight();
+            if (width <= maxSize && height <= maxSize) return bitmap;
+            float scale = maxSize / (float) Math.max(width, height);
+            return Bitmap.createScaledBitmap(
+                bitmap, Math.round(width * scale), Math.round(height * scale), true);
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to decode notification cover", e);
+            return null;
+        }
     }
 
     /** `adb shell setprop debug.lumen.tts.steps N` overrides for experiments. */

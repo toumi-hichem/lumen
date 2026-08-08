@@ -7,6 +7,7 @@ import { icons } from '@/ui/icons'
 import { Select } from '@/ui/Select'
 import { t } from '@/i18n'
 import { SUPPORTED_EXTENSIONS } from '@/reader/engineRegistry'
+import { coverGradientCss } from '@/lib/coverPlaceholder'
 import type { Book, BookStatus } from '@/domain/models'
 
 type SortKey = 'added' | 'recent' | 'title' | 'author'
@@ -275,7 +276,7 @@ function BookCard({
         {book.coverUrl ? (
           <img className="book-cover" src={book.coverUrl} alt="" />
         ) : (
-          <div className="book-cover book-cover-fallback" style={coverGradient(book.title)}>
+          <div className="book-cover book-cover-fallback" style={coverGradientCss(book.title)}>
             {book.title}
           </div>
         )}
@@ -318,14 +319,4 @@ function BookCard({
       )}
     </div>
   )
-}
-
-/** Deterministic cover gradient from the title, used when no cover art. */
-function coverGradient(title: string): React.CSSProperties {
-  let hash = 0
-  for (let i = 0; i < title.length; i++) hash = (hash * 31 + title.charCodeAt(i)) % 360
-  return {
-    background: `linear-gradient(135deg, hsl(${hash} 50% 45%), hsl(${(hash + 40) % 360} 55% 35%))`,
-    color: '#fff',
-  }
 }

@@ -24,13 +24,17 @@ import java.util.TreeMap;
  * without root):
  *   debug.lumen.tts.topology "2,6"  — force cluster core counts, fastest first
  *   debug.lumen.tts.threads N       — force the ORT thread count directly
+ *
+ * Public: shared verbatim with org.wikisubmission.lumen.kokoro, the second
+ * on-device ONNX TTS pipeline — detection and thread-sizing are genuinely
+ * model-agnostic, only the per-model quality knob (initialSteps) is not.
  */
-final class CpuTopology {
+public final class CpuTopology {
 
-    static final class Cluster {
+    public static final class Cluster {
         /** 0 when unknown (forced topology, or fallback detection). */
-        final long maxFreqKhz;
-        final int cores;
+        public final long maxFreqKhz;
+        public final int cores;
 
         Cluster(long maxFreqKhz, int cores) {
             this.maxFreqKhz = maxFreqKhz;
@@ -57,7 +61,7 @@ final class CpuTopology {
     }
 
     /** Detect this device's topology: forced prop, then sysfs, then core count. */
-    static CpuTopology detect() {
+    public static CpuTopology detect() {
         List<Cluster> forced = parseTopologyOverride(getProp("debug.lumen.tts.topology"));
         if (forced != null) return new CpuTopology(forced, SOURCE_OVERRIDE);
         int cpuCount = Runtime.getRuntime().availableProcessors();
@@ -67,15 +71,15 @@ final class CpuTopology {
             Collections.singletonList(new Cluster(0, Math.max(1, cpuCount))), SOURCE_FALLBACK);
     }
 
-    List<Cluster> clusters() {
+    public List<Cluster> clusters() {
         return clusters;
     }
 
-    String source() {
+    public String source() {
         return source;
     }
 
-    int totalCores() {
+    public int totalCores() {
         int total = 0;
         for (Cluster c : clusters) total += c.cores;
         return total;
@@ -87,7 +91,7 @@ final class CpuTopology {
      * or unknown layout) there is no slow cluster to park the AudioTrack and
      * UI threads on, so leave one core free instead.
      */
-    int inferenceThreads() {
+    public int inferenceThreads() {
         int forced = intProp("debug.lumen.tts.threads");
         if (forced > 0) return Math.min(forced, 8);
         if (clusters.size() == 1) {

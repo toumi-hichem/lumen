@@ -1,8 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 import { createTtsEngine } from '@/tts/registry'
 import { hasNativeSupertonic } from '@/tts/supertonic/nativeBridge'
+import { hasNativeKokoro } from '@/tts/kokoro/nativeBridge'
 import type { TtsEngine, TtsVoice } from '@/tts/types'
 import { useSettingsStore } from '@/store/settingsStore'
+
+/**
+ * Engines whose web implementation owns its own worker + audio context
+ * (instance-scoped), so disposing an inactive preview instance is always
+ * safe. Native counterparts of these same ids instead share a native
+ * playback channel that must not be torn down casually — see the dispose
+ * guard below.
+ */
+const ISOLATED_WEB_ENGINE_IDS = new Set(['supertonic', 'kokoro'])
+function hasNativePipeline(engineId: string): boolean {
+  if (engineId === 'supertonic') return hasNativeSupertonic()
+  if (engineId === 'kokoro') return hasNativeKokoro()
+  return false
+}
 
 /** Load the available voices for a given engine (safe for non-initialized). */
 export function useVoices(engineId: string): TtsVoice[] {
@@ -68,8 +83,8 @@ export function useVoicePreview(engineId: string): VoicePreviewApi {
       if (activeRef.current) {
         // Our preview is the thing playing — safe to tear down.
         engine.dispose()
-      } else if (engine.id === 'supertonic' && !hasNativeSupertonic()) {
-        // The web Supertonic engine owns its worker and audio context
+      } else if (ISOLATED_WEB_ENGINE_IDS.has(engine.id) && !hasNativePipeline(engine.id)) {
+        // The web implementation owns its own worker and audio context
         // (instance-scoped), so disposing frees the model without touching
         // any shared playback channel.
         engine.dispose()
@@ -105,6 +120,14 @@ export function useVoicePreview(engineId: string): VoicePreviewApi {
       try {
         if (!engineRef.current) engineRef.current = createTtsEngine(engineId)
         const engine = engineRef.current
+        // Engines that load their model lazily (native Supertonic loads it in
+        // the playback service, after init() has returned) report it here, so
+        // the spinner covers the real wait instead of only engine startup.
+        engine.onNotice = (notice) => {
+          if (runRef.current !== run) return
+          if (notice.type === 'model-loading') setLoading(true)
+          else if (notice.type === 'model-ready') setLoading(false)
+        }
         if (!engine.isReady()) await engine.init()
         if (runRef.current !== run) return
         setLoading(false)

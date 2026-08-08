@@ -194,6 +194,13 @@ export class TtsController {
           this.events.onError?.(message)
           this.setStatus('idle')
         },
+        onExternalStateChange: (playing) => {
+          // A notification tap, headset button, or audio-focus loss paused or
+          // resumed the engine directly. queueMode guards against a change
+          // that lands after onComplete/onError already tore this queue down.
+          if (!this.queueMode) return
+          this.setStatus(playing ? 'playing' : 'paused')
+        },
       })
     } catch (error) {
       this.queueMode = false

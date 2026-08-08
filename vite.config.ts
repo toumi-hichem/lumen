@@ -128,6 +128,12 @@ export default defineConfig({
   },
   server: {
     host: true,
+    // Vite blocks requests whose Host header isn't a loopback/IP address as a
+    // DNS-rebinding guard. Allow the local `lumen.test` alias (mapped to
+    // 127.0.0.1 in /etc/hosts) so it can be opened by name. `.test` is a
+    // reserved TLD browsers never force to HTTPS. Loopback and LAN IP hosts
+    // stay allowed regardless of this list.
+    allowedHosts: ['lumen.test'],
   },
   build: {
     target: 'es2022',

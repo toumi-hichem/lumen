@@ -15,6 +15,9 @@ dist-ssr
 # Supertonic model assets (large; fetched via scripts/fetch-supertonic.sh)
 public/supertonic/
 
+# Kokoro model assets (large; fetched via scripts/fetch-kokoro.sh)
+public/kokoro/
+
 # Capacitor / native build artifacts
 android/app/build/
 android/build/

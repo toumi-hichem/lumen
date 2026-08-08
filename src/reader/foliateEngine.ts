@@ -19,6 +19,14 @@ import {
 } from './types'
 
 
+/** Give the browser a chance to paint and handle input. Extracting speakable
+ *  chunks walks every text node and computes a CFI per chunk, which can run
+ *  long enough on a big chapter to freeze the UI for the whole pass if never
+ *  interrupted. */
+function yieldToMain(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
 interface ChunkSpan {
   chunk: SpeakableChunk
   /** Global character offsets within the section, for tap-to-start mapping. */
@@ -167,6 +175,23 @@ export class FoliateEngine implements BookEngine {
     await view.goToFraction(Math.min(lo + p * (hi - lo), hi - 1e-6))
   }
 
+  /**
+   * Scroll continuous flow by a pixel delta. Foliate's paginator clamps to the
+   * current section, so a delta that lands on a boundary is handed to section
+   * navigation instead of being silently dropped.
+   */
+  scrollByPixels(px: number): void {
+    const renderer = this.view?.renderer
+    if (!renderer?.scrollBy || this.flow !== 'scrolled' || !px) return
+    const before = renderer.start ?? 0
+    renderer.scrollBy(0, px)
+    const moved = Math.abs((renderer.start ?? 0) - before)
+    if (moved < 0.5) {
+      if (px > 0) void this.view?.next()
+      else void this.view?.prev()
+    }
+  }
+
   setFlow(flow: 'paginated' | 'scrolled'): void {
     this.flow = flow
     this.configureRenderer()
@@ -309,6 +334,7 @@ export class FoliateEngine implements BookEngine {
       const body = content.doc.body
       if (!body) continue
       const entries = collectTextNodes(body)
+      let sinceYield = 0
       for (const dc of domToChunks(body, maxChars)) {
         const range = content.doc.createRange()
         range.setStart(dc.startNode, dc.startOffset)
@@ -331,6 +357,10 @@ export class FoliateEngine implements BookEngine {
           doc: content.doc,
         })
         index += 1
+        if (++sinceYield >= 20) {
+          sinceYield = 0
+          await yieldToMain()
+        }
       }
     }
     return result

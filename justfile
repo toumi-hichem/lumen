@@ -11,8 +11,60 @@ export PATH := java_home + "/bin:" + android_home + "/platform-tools:" + android
 app_id := "org.wikisubmission.lumen"
 launch_activity := app_id + "/.MainActivity"
 
+# Dedicated port for the web dev server so it never collides with other Vite
+# projects (which grab the default 5173).
+web_port := "5183"
+
 default:
     @just --list
+
+# Run the Vite dev server (web version) in the foreground with hot reload.
+# Pinned to --port {{web_port}} with --strictPort so it fails fast instead of
+# silently landing on another port. Vite binds 0.0.0.0 (server.host in
+# vite.config), so it is reachable from other devices on your LAN at
+# http://<this-machine-ip>:{{web_port}} as well as localhost.
+#
+# Local pretty URL: http://lumen.test (no port) is served by a local Apache
+# vhost reverse-proxying to :{{web_port}}. One-time host setup:
+#   1. echo '127.0.0.1 lumen.test' | sudo tee -a /etc/hosts
+#   2. Apache vhost (ServerName lumen.test) proxying to 127.0.0.1:{{web_port}},
+#      with proxy_wstunnel enabled for HMR.
+#   3. lumen.test is in server.allowedHosts in vite.config.ts.
+# A `.test` TLD is used (not .com) because browsers never force it to HTTPS.
+# Full setup + the vhost: docs/local-lumen-test-domain.md
+dev:
+    bun run dev -- --port {{web_port}} --strictPort
+
+# Same dev server, detached into the background. Logs go to /tmp/lumen-dev.log
+# and the PID to /tmp/lumen-dev.pid. Stop it with: just dev-stop
+dev-bg:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -f /tmp/lumen-dev.pid ] && kill -0 "$(cat /tmp/lumen-dev.pid)" 2>/dev/null; then
+      echo "Dev server already running (pid $(cat /tmp/lumen-dev.pid)). Stop with: just dev-stop" >&2
+      exit 1
+    fi
+    nohup bun run dev -- --port {{web_port}} --strictPort >/tmp/lumen-dev.log 2>&1 &
+    echo $! > /tmp/lumen-dev.pid
+    echo "Dev server started (pid $!) on http://localhost:{{web_port}}."
+    echo "  - Follow logs:  tail -f /tmp/lumen-dev.log"
+    echo "  - Stop:         just dev-stop"
+
+# Stop the backgrounded dev server started by `just dev-bg`.
+dev-stop:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ ! -f /tmp/lumen-dev.pid ]; then
+      echo "No pid file at /tmp/lumen-dev.pid — nothing to stop." >&2
+      exit 0
+    fi
+    pid="$(cat /tmp/lumen-dev.pid)"
+    if kill "$pid" 2>/dev/null; then
+      echo "Stopped dev server (pid $pid)."
+    else
+      echo "Process $pid was not running."
+    fi
+    rm -f /tmp/lumen-dev.pid
 
 # Compile the web build, sync it into the native project, build a debug APK, then install + launch it on the phone connected over adb (USB or wireless). Inspect the WebView live at chrome://inspect.
 android-debug:

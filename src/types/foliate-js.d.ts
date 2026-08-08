@@ -49,6 +49,10 @@ declare module 'foliate-js/view.js' {
     getContents(): FoliateContent[]
     setStyles?(css: string): void
     scrolled?: boolean
+    /** Scroll the container, clamped to the current section's bounds. */
+    scrollBy?(dx: number, dy: number): void
+    /** Current scroll offset along the flow axis, always positive. */
+    readonly start?: number
     destroy(): void
   }
 

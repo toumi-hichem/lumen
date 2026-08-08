@@ -23,7 +23,7 @@ import java.util.concurrent.Executors;
  * JS bridge for the native Supertonic read-aloud pipeline. Owns model
  * download/state and hands full playback queues to SupertonicTtsService,
  * relaying its progress back to JS as plugin events ('chunk', 'state',
- * 'complete', 'error', 'downloadProgress').
+ * 'complete', 'error', 'downloadProgress', 'skip').
  */
 @CapacitorPlugin(
     name = "SupertonicNative",
@@ -169,7 +169,8 @@ public class SupertonicNativePlugin extends Plugin {
             call.getInt("steps", DEFAULT_STEPS),
             call.getInt("startIndex", 0),
             call.getString("lang", "en"),
-            call.getString("title", null)
+            call.getString("title", null),
+            call.getString("cover", null)
         );
         SupertonicTtsService.setPendingRequest(request, new SupertonicTtsService.Listener() {
             @Override
@@ -218,6 +219,20 @@ public class SupertonicNativePlugin extends Plugin {
                 JSObject data = new JSObject();
                 data.put("index", index);
                 notifyListeners("synthesizing", data);
+            }
+
+            @Override
+            public void onSkipNext() {
+                JSObject data = new JSObject();
+                data.put("direction", "next");
+                notifyListeners("skip", data);
+            }
+
+            @Override
+            public void onSkipPrevious() {
+                JSObject data = new JSObject();
+                data.put("direction", "prev");
+                notifyListeners("skip", data);
             }
         });
 

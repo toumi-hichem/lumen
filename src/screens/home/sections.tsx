@@ -4,6 +4,7 @@ import type { Book, Bookmark, Highlight } from '@/domain/models'
 import type { ReadingStats } from '@/services/readingStats'
 import type { IconName } from '@/ui/icons'
 import { mostRecent } from '@/lib/recent'
+import { coverGradientCss } from '@/lib/coverPlaceholder'
 
 /** Everything the Home previews need, loaded once by the Home screen. */
 export interface HomeData {
@@ -192,7 +193,7 @@ function CoverButton({
       {book.coverUrl ? (
         <img className="book-cover" src={book.coverUrl} alt="" />
       ) : (
-        <div className="book-cover book-cover-fallback" style={coverGradient(book.title)}>
+        <div className="book-cover book-cover-fallback" style={coverGradientCss(book.title)}>
           {book.title}
         </div>
       )}
@@ -210,14 +211,4 @@ function formatMinutes(total: number): string {
   const h = Math.floor(total / 60)
   const m = total % 60
   return m ? `${h}h ${m}m` : `${h}h`
-}
-
-/** Deterministic cover gradient from the title, used when no cover art. */
-function coverGradient(title: string): React.CSSProperties {
-  let hash = 0
-  for (let i = 0; i < title.length; i++) hash = (hash * 31 + title.charCodeAt(i)) % 360
-  return {
-    background: `linear-gradient(135deg, hsl(${hash} 50% 45%), hsl(${(hash + 40) % 360} 55% 35%))`,
-    color: '#fff',
-  }
 }

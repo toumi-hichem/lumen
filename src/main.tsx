@@ -5,6 +5,7 @@ import { Capacitor } from '@capacitor/core'
 import { ThemeProvider } from '@/theme/ThemeProvider'
 import { useSettingsStore } from '@/store/settingsStore'
 import { isSupertonicInstalled } from '@/tts/supertonic/install'
+import { isKokoroInstalled } from '@/tts/kokoro/install'
 import { App } from './App'
 import { registerServiceWorker } from './pwa'
 import './theme/uiFonts'
@@ -24,9 +25,15 @@ void useSettingsStore
     const { tts, setTts } = useSettingsStore.getState()
     // If the user explicitly chose a working engine, respect it.
     if (tts.engineChosen && tts.engineId !== 'web-speech') return
-    // Supertonic is the highest-quality option when its assets are present.
+    // Supertonic and Kokoro are both on-device options; prefer whichever is
+    // already installed. Supertonic is the incumbent default when both (or
+    // neither) are, so existing users never get silently switched.
     if (await isSupertonicInstalled()) {
       setTts({ engineId: 'supertonic' })
+      return
+    }
+    if (await isKokoroInstalled()) {
+      setTts({ engineId: 'kokoro' })
       return
     }
     // On Android/iOS use the native TTS — web-speech is unavailable in the WebView.

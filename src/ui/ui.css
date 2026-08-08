@@ -639,7 +639,9 @@
   background: var(--reader-page-background, var(--color-background));
 }
 
-/* Header overlaid on content so the viewport always fills the full screen. */
+/* Header overlaid on content so the viewport always fills the full screen.
+   The content box never resizes when the chrome shows/hides — the bars are a
+   translucent layer floating on top of the page. */
 .reader > .appbar {
   position: absolute;
   top: 0;
@@ -647,6 +649,9 @@
   right: 0;
   z-index: 10;
   transition: opacity 0.25s ease, transform 0.25s ease;
+  background: color-mix(in srgb, var(--color-surface) 86%, transparent);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
 }
 
 .reader-viewport {
@@ -655,7 +660,9 @@
   overflow: hidden;
 }
 
-/* Footer wraps the progress bar and action bar together. */
+/* Footer wraps the progress bar and action bar together. Like the header it
+   floats over the page; the blur lives here and its children stay translucent
+   so the whole strip reads as one layer. */
 .reader-footer {
   position: absolute;
   bottom: 0;
@@ -663,12 +670,16 @@
   right: 0;
   z-index: 10;
   transition: opacity 0.25s ease, transform 0.25s ease;
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
 }
 
+/* The tap zones track the content box, which is always full-bleed inside the
+   safe area — never under the notch or home indicator. */
 .reader-tap-zone {
   position: absolute;
-  top: 0;
-  bottom: 0;
+  top: env(safe-area-inset-top, 0px);
+  bottom: env(safe-area-inset-bottom, 0px);
   width: 22%;
   z-index: 5;
 }
@@ -677,12 +688,6 @@
 .reader-tap-zone.center { width: auto; }
 
 /* Immersive mode — slide header up and footer down instead of display:none. */
-/* With the chrome hidden the tap zones would run under the notch and home
-   indicator; keep them inside the safe area. */
-.reader.immersive .reader-tap-zone {
-  top: env(safe-area-inset-top, 0px);
-  bottom: env(safe-area-inset-bottom, 0px);
-}
 .reader.immersive > .appbar {
   opacity: 0;
   transform: translateY(-100%);
@@ -731,7 +736,7 @@
 
 .reader-progress {
   height: 8px;
-  background: var(--color-surface-alt);
+  background: color-mix(in srgb, var(--color-surface-alt) 75%, transparent);
   cursor: pointer;
 }
 
@@ -824,7 +829,7 @@
   justify-content: space-around;
   padding: 6px 8px;
   padding-bottom: calc(6px + env(safe-area-inset-bottom));
-  background: var(--color-surface);
+  background: color-mix(in srgb, var(--color-surface) 86%, transparent);
   border-top: 1px solid var(--color-border);
   gap: 2px;
   animation: footer-rise 0.2s ease;

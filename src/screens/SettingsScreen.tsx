@@ -25,7 +25,17 @@ import { Toggle } from '@/ui/Toggle'
 import { Slider } from '@/ui/Slider'
 import { Icon } from '@/ui/Icon'
 import { icons } from '@/ui/icons'
-import { SupertonicDownload } from './settings/SupertonicDownload'
+import { AssetEngineDownload } from './settings/AssetEngineDownload'
+import { SUPERTONIC_SIZE_MB } from '@/tts/supertonic/assets'
+import {
+  installSupertonic,
+  isSupertonicInstalled,
+  removeSupertonic,
+} from '@/tts/supertonic/install'
+import { hasNativeSupertonic, SupertonicNative } from '@/tts/supertonic/nativeBridge'
+import { KOKORO_SIZE_MB } from '@/tts/kokoro/assets'
+import { installKokoro, isKokoroInstalled, removeKokoro } from '@/tts/kokoro/install'
+import { hasNativeKokoro, KokoroNative } from '@/tts/kokoro/nativeBridge'
 import { SettingSection } from './settings/SettingSection'
 import { ThemePicker } from './settings/ThemePicker'
 import { ALL_ACTION_META } from './reader/ReaderActionBar'
@@ -363,7 +373,28 @@ export function SettingsScreen() {
               onChange={(autoAdvance) => setTts({ autoAdvance })}
             />
           </div>
-          <SupertonicDownload
+          <AssetEngineDownload
+            engineId="supertonic"
+            label="Supertonic"
+            sizeMb={SUPERTONIC_SIZE_MB}
+            isInstalled={isSupertonicInstalled}
+            install={installSupertonic}
+            remove={removeSupertonic}
+            hasNative={hasNativeSupertonic}
+            getCpuTopology={() => SupertonicNative.getCpuTopology()}
+            fallbackEngineId="web-speech"
+            onInstallChange={() => setAssetsRevision((n) => n + 1)}
+          />
+          <AssetEngineDownload
+            engineId="kokoro"
+            label="Kokoro"
+            sizeMb={KOKORO_SIZE_MB}
+            isInstalled={isKokoroInstalled}
+            install={installKokoro}
+            remove={removeKokoro}
+            hasNative={hasNativeKokoro}
+            getCpuTopology={() => KokoroNative.getCpuTopology()}
+            fallbackEngineId="web-speech"
             onInstallChange={() => setAssetsRevision((n) => n + 1)}
           />
         </SettingSection>

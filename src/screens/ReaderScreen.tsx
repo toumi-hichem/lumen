@@ -1,10 +1,19 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useReader } from './reader/useReader'
 import { useTts } from './reader/useTts'
 import { useReadAlong } from './reader/useReadAlong'
 import { useKeepAwake } from './reader/useKeepAwake'
 import { useAutoScroll } from './reader/useAutoScroll'
+import { useVolumeKeys } from './reader/useVolumeKeys'
+import { createSmoothScroller } from './reader/smoothScroll'
 import { SelectionMenu } from './reader/SelectionMenu'
 import {
   ReaderActionBar,
@@ -24,10 +33,15 @@ import { Icon } from '@/ui/Icon'
 import { icons } from '@/ui/icons'
 import { ArrowLeft } from 'lucide-react'
 
+/** How much of the screen one volume press moves in continuous flow. */
+const VOLUME_SCROLL_FRACTION = 0.8
+
 export function ReaderScreen() {
   const { bookId = '' } = useParams()
   const navigate = useNavigate()
-  const [immersive, setImmersive] = useState(false)
+  // Books open clean: the chrome is a layer that floats over the page, so
+  // leaving it up on entry would cover the first and last lines of text.
+  const [immersive, setImmersive] = useState(true)
   // In continuous mode there are no tap-zone overlays, so a tap inside the
   // content toggles the reader chrome instead.
   const toggleImmersive = useCallback(() => setImmersive((v) => !v), [])
@@ -41,12 +55,10 @@ export function ReaderScreen() {
   const [panelTab, setPanelTab] = useState<PanelTab>('toc')
   const [exitMenuOpen, setExitMenuOpen] = useState(false)
   const appbarRef = useRef<HTMLElement>(null)
-  const footerRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(false)
   const [locked, setLocked] = useState(false)
-  // Which footer view is shown. The nav bar always occupies the measured
-  // footer; the tts/autoscroll panels overlay it so opening one does NOT resize
-  // the reader content (which would force the engine to re-render = a flash).
+  // Which footer view is shown. The nav bar always occupies the footer; the
+  // tts/autoscroll panels stack on top of it.
   const [footerMode, setFooterMode] = useState<FooterMode>('default')
 
   // Continuous (scrolled) layout: drop the page-turn tap zones so the content
@@ -58,17 +70,6 @@ export function ReaderScreen() {
     if (!el) return
     const update = () =>
       document.documentElement.style.setProperty('--appbar-height', `${el.offsetHeight}px`)
-    update()
-    const ro = new ResizeObserver(update)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
-
-  useLayoutEffect(() => {
-    const el = footerRef.current
-    if (!el) return
-    const update = () =>
-      document.documentElement.style.setProperty('--footer-height', `${el.offsetHeight}px`)
     update()
     const ro = new ResizeObserver(update)
     ro.observe(el)
@@ -134,7 +135,12 @@ export function ReaderScreen() {
   useEffect(() => {
     const prev = prevTtsStatusRef.current
     prevTtsStatusRef.current = tts.status
-    if (prev !== 'playing' && tts.status === 'playing') setFooterMode('tts')
+    if (prev !== 'playing' && tts.status === 'playing') {
+      setFooterMode('tts')
+      // Narration can start without the chrome up (headset button); reveal it
+      // so the panel it just opened is actually on screen.
+      setImmersive(false)
+    }
   }, [tts.status])
 
   useEffect(() => {
@@ -208,28 +214,44 @@ export function ReaderScreen() {
     })
   }, [reader.book?.id, ttsPrefs.engineId, ttsPrefs.voiceId, ttsPrefs.rate])
 
+  // Chunk extraction (walking the chapter's DOM and computing a CFI per
+  // sentence) yields periodically but can still take a beat on long
+  // chapters; flip the tts icon to its loading state right away so tapping
+  // play never looks like nothing happened.
+  const [preparingTts, setPreparingTts] = useState(false)
+
   const startReadAloud = async () => {
-    const chunks = await reader.getSpeakableChunks(maxChars)
-    if (chunks.length) {
-      // Begin narration at the top of the page being read, not the chapter.
-      tts.start(chunks, reader.currentChunkIndex())
+    setPreparingTts(true)
+    try {
+      const chunks = await reader.getSpeakableChunks(maxChars)
+      if (chunks.length) {
+        // Begin narration at the top of the page being read, not the chapter.
+        tts.start(chunks, reader.currentChunkIndex())
+      }
+    } finally {
+      setPreparingTts(false)
     }
   }
 
   const readFromSelection = async () => {
     const sel = reader.selection
     reader.clearSelection()
-    const chunks = await reader.getSpeakableChunks(maxChars)
-    if (!chunks.length) return
-    // Resolve the selection's own anchor to a chunk; the fuzzy text match is
-    // only a fallback (it fails on selections spanning block boundaries).
-    let index = sel?.cfiRange ? reader.chunkIndexForAnchor(sel.cfiRange) : null
-    if (index == null && sel?.text) {
-      const needle = sel.text.replace(/\s+/g, ' ').trim().slice(0, 30).toLowerCase()
-      const found = chunks.findIndex((c) => c.text.toLowerCase().includes(needle))
-      if (found >= 0) index = found
+    setPreparingTts(true)
+    try {
+      const chunks = await reader.getSpeakableChunks(maxChars)
+      if (!chunks.length) return
+      // Resolve the selection's own anchor to a chunk; the fuzzy text match is
+      // only a fallback (it fails on selections spanning block boundaries).
+      let index = sel?.cfiRange ? reader.chunkIndexForAnchor(sel.cfiRange) : null
+      if (index == null && sel?.text) {
+        const needle = sel.text.replace(/\s+/g, ' ').trim().slice(0, 30).toLowerCase()
+        const found = chunks.findIndex((c) => c.text.toLowerCase().includes(needle))
+        if (found >= 0) index = found
+      }
+      tts.start(chunks, index ?? 0)
+    } finally {
+      setPreparingTts(false)
     }
-    tts.start(chunks, index ?? 0)
   }
 
   const seek = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -268,6 +290,47 @@ export function ReaderScreen() {
     if (tts.status === 'idle') void startReadAloud()
   }
   const openAutoScroll = () => setFooterMode('autoscroll')
+
+  // Volume-key navigation. The keys are only borrowed while the book has the
+  // screen to itself: any chrome (reader menu, footer panel, selection menu,
+  // lock overlay) or active narration hands them back to the system, so they
+  // adjust the volume as usual.
+  const volumeKeysEnabled =
+    reader.status === 'ready' &&
+    immersive &&
+    !panelOpen &&
+    !exitMenuOpen &&
+    !locked &&
+    !reader.selection &&
+    footerMode === 'default' &&
+    tts.status === 'idle'
+
+  const volumeScroller = useMemo(
+    () => createSmoothScroller(reader.scrollByPixels),
+    [reader.scrollByPixels],
+  )
+
+  // Stop mid-flight motion as soon as the keys are handed back, and on exit.
+  useEffect(() => {
+    if (!volumeKeysEnabled) volumeScroller.cancel()
+  }, [volumeKeysEnabled, volumeScroller])
+  useEffect(() => () => volumeScroller.cancel(), [volumeScroller])
+
+  useVolumeKeys({
+    enabled: volumeKeysEnabled,
+    onPress: ({ direction, repeat }) => {
+      if (continuous) {
+        // Most of a screen per press, ramped up and down so the eye keeps its
+        // place instead of having to find it again after a jump.
+        const step = window.innerHeight * VOLUME_SCROLL_FRACTION
+        volumeScroller.scrollBy(direction === 'down' ? step : -step)
+        return
+      }
+      // Auto-repeat would riffle through the book; one press, one page.
+      if (repeat) return
+      turn(direction === 'down' ? 'next' : 'prev')
+    },
+  })
 
   if (reader.status === 'error') {
     return (
@@ -331,15 +394,13 @@ export function ReaderScreen() {
           ref={reader.containerRef}
           style={{
             position: 'absolute',
-            // When the chrome is folded away (immersive), the content fills the
-            // whole screen instead of leaving blank strips where the header and
-            // footer used to be. Keep it clear of the notch / home indicator.
-            top: immersive
-              ? 'env(safe-area-inset-top, 0px)'
-              : 'var(--appbar-height, 60px)',
-            bottom: immersive
-              ? 'env(safe-area-inset-bottom, 0px)'
-              : 'var(--footer-height, 100px)',
+            // The content box is a fixed size: it always fills the screen and
+            // the header/footer float over it as a separate layer. Insetting it
+            // while the chrome is visible would resize the box on every toggle,
+            // forcing the engine to re-paginate (a visible flash and a lost
+            // page position). Keep it clear of the notch / home indicator only.
+            top: 'env(safe-area-inset-top, 0px)',
+            bottom: 'env(safe-area-inset-bottom, 0px)',
             left: 0,
             right: 0,
             // Match the page colour so any brief engine re-render shows the
@@ -426,11 +487,10 @@ export function ReaderScreen() {
         )}
       </div>
 
-      {/* Footer panels overlay the bar; they sit OUTSIDE the measured footer so
-          opening one never resizes the reader content (which causes a flash). */}
+      {/* Footer panels overlay the nav bar rather than replacing it. */}
       {footerMode === 'tts' && (
         <TtsPanel
-          ttsStatus={tts.status}
+          ttsStatus={preparingTts ? 'loading' : tts.status}
           ttsError={tts.error}
           ttsFallbackReason={tts.fallbackReason}
           ttsModelState={tts.modelState}
@@ -458,7 +518,7 @@ export function ReaderScreen() {
         />
       )}
 
-      <div className="reader-footer" ref={footerRef}>
+      <div className="reader-footer">
         {/* Chapter-scoped: the bar spans the current chapter, not the book. */}
         <div
           className="reader-progress"
@@ -480,7 +540,7 @@ export function ReaderScreen() {
         <ReaderActionBar
           canAutoScroll={canAutoScroll}
           autoScroll={autoScroll}
-          ttsStatus={tts.status}
+          ttsStatus={preparingTts ? 'loading' : tts.status}
           themeMode={theme.mode}
           onToggleTheme={handleThemeToggle}
           onOpenTts={openTts}

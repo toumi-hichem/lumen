@@ -26,6 +26,8 @@ export class SupertonicNativeEngine implements TtsEngine {
   private ready = false
   private listeners: PluginListenerHandle[] = []
   private queueEvents: TtsQueueEvents | null = null
+  /** Settles the promise returned by a single-chunk speak(). */
+  private pendingSpeak: (() => void) | null = null
   onNotice?: (notice: TtsEngineNotice) => void
 
   async init(): Promise<void> {
@@ -57,14 +59,35 @@ export class SupertonicNativeEngine implements TtsEngine {
 
   /**
    * Single-chunk speak, used by previews. Queue playback (the reader) goes
-   * through playQueue. Resolution is fire-and-forget: the service plays it.
+   * through playQueue. The plugin call only *starts* the playback service, so
+   * the promise is held open until the service reports completion — callers
+   * rely on speak() tracking actual playback (see TtsEngine.speak).
    */
   async speak(text: string, options: SpeakOptions): Promise<void> {
-    await SupertonicNative.speak({
-      chunks: [text],
-      voiceId: presetVoiceId(options.voiceId),
-      rate: options.rate,
+    this.settlePendingSpeak()
+    // Armed before the bridge call rather than after. Capacitor runs plugin
+    // methods on a background thread ("CapacitorPlugins"), so the service can
+    // in principle emit a terminal event before speak()'s own resolve is
+    // dispatched; a terminal event with no resolver installed would hang this
+    // forever. The window is two statements wide and no current service path
+    // fires that fast — this just makes the ordering not matter.
+    let settle!: () => void
+    const done = new Promise<void>((resolve) => {
+      settle = resolve
     })
+    this.pendingSpeak = settle
+    try {
+      await SupertonicNative.speak({
+        chunks: [text],
+        voiceId: presetVoiceId(options.voiceId),
+        rate: options.rate,
+      })
+    } catch (error) {
+      if (this.pendingSpeak === settle) this.pendingSpeak = null
+      settle()
+      throw error
+    }
+    await done
   }
 
   async playQueue(
@@ -73,13 +96,16 @@ export class SupertonicNativeEngine implements TtsEngine {
     startIndex: number,
     events: TtsQueueEvents,
   ): Promise<void> {
+    // A queue supersedes any preview still holding the playback service.
+    this.settlePendingSpeak()
     this.queueEvents = events
     await SupertonicNative.speak({
       chunks,
       voiceId: presetVoiceId(options.voiceId),
       rate: options.rate,
       startIndex,
-      title: 'Reading aloud',
+      title: options.title ?? 'Reading aloud',
+      cover: options.coverUrl,
     })
   }
 
@@ -93,6 +119,9 @@ export class SupertonicNativeEngine implements TtsEngine {
 
   stop(): void {
     void SupertonicNative.stopPlayback()
+    // stopPlayback never emits 'complete', so resolve here: the contract is
+    // that stop() makes an in-flight speak() resolve promptly.
+    this.settlePendingSpeak()
   }
 
   dispose(): void {
@@ -103,15 +132,24 @@ export class SupertonicNativeEngine implements TtsEngine {
     this.ready = false
   }
 
+  /** Resolve an outstanding single-chunk speak(), if any. */
+  private settlePendingSpeak(): void {
+    const resolve = this.pendingSpeak
+    this.pendingSpeak = null
+    resolve?.()
+  }
+
   private async attachListeners(): Promise<void> {
     this.listeners = await Promise.all([
       SupertonicNative.addListener('chunk', ({ index }) => {
         this.queueEvents?.onChunk(index)
       }),
       SupertonicNative.addListener('complete', () => {
+        this.settlePendingSpeak()
         this.queueEvents?.onComplete()
       }),
       SupertonicNative.addListener('error', ({ message }) => {
+        this.settlePendingSpeak()
         this.queueEvents?.onError(message)
       }),
       SupertonicNative.addListener('modelState', ({ state, elapsedMs }) => {
@@ -123,6 +161,17 @@ export class SupertonicNativeEngine implements TtsEngine {
       }),
       SupertonicNative.addListener('synthesizing', ({ index }) => {
         this.onNotice?.({ type: 'synthesizing', index })
+      }),
+      // The service emits this whenever pausePlayback()/resumePlayback() run,
+      // regardless of trigger: a tap on the notification's own Play/Pause
+      // button, an audio-focus loss, a headset button — none of which go
+      // through this engine's pauseQueue()/resumeQueue(). Without forwarding
+      // it, the controller's status drifts from what's actually playing.
+      SupertonicNative.addListener('state', ({ playing }) => {
+        this.queueEvents?.onExternalStateChange?.(playing)
+      }),
+      SupertonicNative.addListener('skip', ({ direction }) => {
+        this.onNotice?.({ type: 'skip', direction })
       }),
     ])
   }

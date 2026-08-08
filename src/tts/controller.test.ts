@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { TtsController } from './controller'
 import { registerTtsEngine } from './registry'
-import type { SpeakOptions, TtsEngine } from './types'
+import type { SpeakOptions, TtsEngine, TtsQueueEvents } from './types'
 
 /** Records spoken chunks and resolves immediately, for deterministic tests. */
 class FakeEngine implements TtsEngine {
@@ -82,6 +82,50 @@ registerTtsEngine({
   factory: () => {
     lastManualEngine = new ManualEngine()
     return lastManualEngine
+  },
+  available: () => true,
+})
+
+/** Engine whose playback the controller hands over wholesale, like the
+ *  native Supertonic queue path — for testing queueMode-specific behaviour. */
+class QueueEngine implements TtsEngine {
+  readonly id = 'fake-queue'
+  readonly name = 'Queue'
+  readonly requiresAssets = false
+  events: TtsQueueEvents | null = null
+  private ready = false
+  async init(): Promise<void> {
+    this.ready = true
+  }
+  isReady(): boolean {
+    return this.ready
+  }
+  async listVoices() {
+    return []
+  }
+  async speak(): Promise<void> {}
+  stop(): void {}
+  async playQueue(
+    _chunks: string[],
+    _options: SpeakOptions,
+    _startIndex: number,
+    events: TtsQueueEvents,
+  ): Promise<void> {
+    this.events = events
+  }
+  pauseQueue(): void {}
+  resumeQueue(): void {}
+  dispose(): void {}
+}
+
+let lastQueueEngine: QueueEngine | null = null
+registerTtsEngine({
+  id: 'fake-queue',
+  name: 'Queue',
+  requiresAssets: false,
+  factory: () => {
+    lastQueueEngine = new QueueEngine()
+    return lastQueueEngine
   },
   available: () => true,
 })
@@ -175,5 +219,40 @@ describe('TtsController', () => {
     await tick()
     expect(engine.spoken).toEqual([{ text: 'one', voiceId: undefined }])
     engine.finishCurrent()
+  })
+})
+
+describe('TtsController queue-mode external state sync', () => {
+  // The bug this covers: a tap on the native notification's own Play/Pause
+  // button (or an audio-focus loss) changes playback directly in the engine,
+  // bypassing pause()/resume(). Without this reconciliation the in-app
+  // button and the notification would show contradictory states.
+  it('reconciles status when the engine reports an external pause/resume', async () => {
+    const statuses: string[] = []
+    const controller = new TtsController({ onStatus: (s) => statuses.push(s) })
+    await controller.useEngine('fake-queue')
+    void controller.play(['one'], opts)
+    await tick()
+    const engine = lastQueueEngine as QueueEngine
+
+    engine.events?.onExternalStateChange?.(false)
+    expect(controller.getStatus()).toBe('paused')
+
+    engine.events?.onExternalStateChange?.(true)
+    expect(controller.getStatus()).toBe('playing')
+  })
+
+  it('ignores an external state change once the queue has already ended', async () => {
+    const controller = new TtsController({})
+    await controller.useEngine('fake-queue')
+    void controller.play(['one'], opts)
+    await tick()
+    const engine = lastQueueEngine as QueueEngine
+
+    engine.events?.onComplete()
+    expect(controller.getStatus()).toBe('idle')
+
+    engine.events?.onExternalStateChange?.(false)
+    expect(controller.getStatus()).toBe('idle')
   })
 })
