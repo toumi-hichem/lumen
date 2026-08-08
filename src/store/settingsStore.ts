@@ -86,7 +86,9 @@ export const defaultSettings: AppSettings = {
     letterSpacing: 0,
     hideImages: false,
     softWrap: true,
-    keepAwake: false,
+    // A book open on screen is being read, not idled on; the display staying
+    // lit is the expected behaviour, so this is on unless turned off.
+    keepAwake: true,
     autoScrollSpeed: 30,
     footerActionIds: ['theme', 'tts', 'autoscroll', 'toc', 'bookmarks', 'search', 'settings'],
   },

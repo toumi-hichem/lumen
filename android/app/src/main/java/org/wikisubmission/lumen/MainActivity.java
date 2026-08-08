@@ -8,6 +8,7 @@ import com.getcapacitor.BridgeActivity;
 import org.wikisubmission.lumen.supertonic.SupertonicNativePlugin;
 import org.wikisubmission.lumen.kokoro.KokoroNativePlugin;
 import org.wikisubmission.lumen.volume.VolumeKeysPlugin;
+import org.wikisubmission.lumen.screen.ScreenAwakePlugin;
 
 public class MainActivity extends BridgeActivity {
     @Override
@@ -15,6 +16,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(SupertonicNativePlugin.class);
         registerPlugin(KokoroNativePlugin.class);
         registerPlugin(VolumeKeysPlugin.class);
+        registerPlugin(ScreenAwakePlugin.class);
         super.onCreate(savedInstanceState);
         int nightMode = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
         int bgColor = nightMode == Configuration.UI_MODE_NIGHT_YES

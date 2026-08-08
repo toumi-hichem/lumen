@@ -236,7 +236,9 @@ export function SettingsScreen() {
             <span>
               Keep screen on while reading
               <br />
-              <small className="muted">Prevents the display from sleeping.</small>
+              <small className="muted">
+                The display won't dim or sleep while a book is open.
+              </small>
             </span>
             <Toggle
               ariaLabel="Keep screen on while reading"

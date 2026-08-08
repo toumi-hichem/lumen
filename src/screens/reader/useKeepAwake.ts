@@ -1,17 +1,26 @@
 import { useEffect } from 'react'
-import { requestWakeLock } from '@/lib/native'
+import { requestWakeLock, setNativeKeepAwake } from '@/lib/native'
 
 /**
- * Hold a screen wake lock while `active`. Re-acquires the lock when the tab
- * becomes visible again, since the browser releases it on tab switch.
+ * Keep the display awake while `active`. Prefers the native window flag, which
+ * also prevents the screen from dimming; falls back to the web wake lock (and
+ * re-acquires it on tab switch, since the browser drops it when hidden).
  */
 export function useKeepAwake(active: boolean): void {
   useEffect(() => {
     if (!active) return
     let release = () => {}
     let cancelled = false
+    let native = false
 
     const acquire = async () => {
+      if (native) return
+      native = await setNativeKeepAwake(true)
+      if (native) {
+        // The effect was torn down while the call was in flight.
+        if (cancelled) void setNativeKeepAwake(false)
+        return
+      }
       const r = await requestWakeLock()
       if (cancelled) r()
       else release = r
@@ -27,6 +36,7 @@ export function useKeepAwake(active: boolean): void {
       cancelled = true
       document.removeEventListener('visibilitychange', onVisibility)
       release()
+      if (native) void setNativeKeepAwake(false)
     }
   }, [active])
 }

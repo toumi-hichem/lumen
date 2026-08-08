@@ -23,6 +23,26 @@ export async function applyStatusBarTheme(
   }
 }
 
+/**
+ * Keep the display awake through the native window flag, which also stops the
+ * pre-sleep dimming the Wake Lock API leaves in place. Returns false when the
+ * plugin isn't there, so the caller can fall back to the web API.
+ */
+export async function setNativeKeepAwake(enabled: boolean): Promise<boolean> {
+  if (!platform.isNative()) return false
+  try {
+    const { Capacitor, registerPlugin } = await import('@capacitor/core')
+    if (!Capacitor.isPluginAvailable('ScreenAwake')) return false
+    const ScreenAwake = registerPlugin<{
+      setKeepAwake(options: { enabled: boolean }): Promise<void>
+    }>('ScreenAwake')
+    await ScreenAwake.setKeepAwake({ enabled })
+    return true
+  } catch {
+    return false
+  }
+}
+
 interface WakeLockSentinelLike {
   release(): Promise<void>
 }
