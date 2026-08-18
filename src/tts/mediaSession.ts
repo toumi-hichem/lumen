@@ -63,6 +63,33 @@ export function setMediaPlaybackState(
 }
 
 /**
+ * Publish playback progress so the OS notification draws a progress bar; with
+ * no duration it draws none at all. Speech engines expose no timeline, so
+ * callers pass an estimate. Passing null clears the bar.
+ */
+export function setMediaPositionState(
+  state: { durationSeconds: number; positionSeconds: number } | null,
+): void {
+  if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return
+  const ms = navigator.mediaSession
+  if (typeof ms.setPositionState !== 'function') return
+  try {
+    if (!state || !Number.isFinite(state.durationSeconds) || state.durationSeconds <= 0) {
+      ms.setPositionState()
+      return
+    }
+    ms.setPositionState({
+      duration: state.durationSeconds,
+      // The spec rejects a position past the duration.
+      position: Math.min(Math.max(0, state.positionSeconds), state.durationSeconds),
+      playbackRate: 1,
+    })
+  } catch {
+    // Unsupported or rejected values; progress is cosmetic, never fatal.
+  }
+}
+
+/**
  * Update the subtitle shown in the OS notification with the currently-spoken
  * line without re-registering all action handlers.
  */

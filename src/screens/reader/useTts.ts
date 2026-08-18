@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { TtsController, type TtsStatus } from '@/tts/controller'
 import { listTtsEngines } from '@/tts/registry'
-import { setMediaPlaybackState, setupMediaSession, updateMediaSessionLine } from '@/tts/mediaSession'
+import {
+  setMediaPlaybackState,
+  setMediaPositionState,
+  setupMediaSession,
+  updateMediaSessionLine,
+} from '@/tts/mediaSession'
 import { renderCoverPlaceholder } from '@/lib/coverPlaceholder'
 import { useSettingsStore } from '@/store/settingsStore'
 import type { SpeakableChunk } from '@/reader/types'
@@ -41,6 +46,13 @@ export interface ReaderTtsApi {
   stop: () => void
   setSleepTimer: (minutes: number | null) => void
 }
+
+/**
+ * Nominal speaking speed used to estimate how long a chapter takes to read.
+ * No speech engine reports a timeline, so the notification's progress bar is
+ * projected from text length at this rate, scaled by the user's speed setting.
+ */
+const CHARS_PER_SECOND = 14
 
 /** A data: URL declares its own MIME type; artwork objects want it explicit. */
 function coverMimeType(dataUrl: string): string {
@@ -146,6 +158,26 @@ export function useTts(options: UseTtsOptions = {}): ReaderTtsApi {
       updateMediaSessionLine(chunks[chunkIndex].text)
     }
   }, [chunkIndex, chunks, status])
+
+  // Progress bar in the OS notification: elapsed is the text already spoken,
+  // the maximum is the estimated reading time of the whole chapter.
+  useEffect(() => {
+    if (status === 'idle' || chunks.length === 0) {
+      setMediaPositionState(null)
+      return
+    }
+    const perSecond = CHARS_PER_SECOND * Math.max(0.1, tts.rate)
+    let spokenChars = 0
+    let totalChars = 0
+    for (const [index, chunk] of chunks.entries()) {
+      if (index < chunkIndex) spokenChars += chunk.text.length
+      totalChars += chunk.text.length
+    }
+    setMediaPositionState({
+      durationSeconds: totalChars / perSecond,
+      positionSeconds: spokenChars / perSecond,
+    })
+  }, [chunks, chunkIndex, status, tts.rate])
 
   // Synthesis-progress feedback only makes sense while narration is active.
   useEffect(() => {

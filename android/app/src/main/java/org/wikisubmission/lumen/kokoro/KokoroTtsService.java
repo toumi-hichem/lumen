@@ -47,6 +47,10 @@ public class KokoroTtsService extends Service {
     private static final String TAG = "KokoroTts";
     private static final String CHANNEL_ID = "lumen_tts_kokoro";
     private static final int NOTIFICATION_ID = 42;
+    /** Speaking rate assumed before any audio exists to measure, at rate 1.0. */
+    private static final float DEFAULT_CHARS_PER_SECOND = 14f;
+    /** Characters of real audio needed before the measured rate is trusted. */
+    private static final int MIN_CHARS_FOR_ESTIMATE = 200;
 
     static final String ACTION_START = "org.wikisubmission.lumen.kokorotts.START";
     static final String ACTION_PLAY_PAUSE = "org.wikisubmission.lumen.kokorotts.PLAY_PAUSE";
@@ -119,7 +123,14 @@ public class KokoroTtsService extends Service {
     private volatile AtomicBoolean cancelled = new AtomicBoolean(false);
     private final Object pauseLock = new Object();
     private volatile boolean paused = false;
-    private long framesWritten = 0;
+    private volatile long framesWritten = 0;
+    /** Characters of the whole queue, from the start index to the last chunk. */
+    private volatile long queuedChars = 0;
+    /** Characters whose audio has been fully written, and the frames it took. */
+    private volatile long spokenChars = 0;
+    private volatile long spokenFrames = 0;
+    /** Output rate of the current AudioTrack, for frame → millisecond maths. */
+    private volatile int sampleRate = 0;
 
     private KokoroRuntime runtime;
     /** 0.3 s of silence written between chunks, like Supertonic's pipeline. */
@@ -190,6 +201,9 @@ public class KokoroTtsService extends Service {
         this.paused = false;
         this.currentLine = null;
         this.coverBitmap = decodeCover(req.cover);
+        this.queuedChars = countChars(req);
+        this.spokenChars = 0;
+        this.spokenFrames = 0;
 
         createMediaSession();
         goForeground(true);
@@ -266,6 +280,10 @@ public class KokoroTtsService extends Service {
                 updatePlaybackState(true);
                 writeFully(chunk.samples, cancelled);
                 writeFully(interChunkSilence, cancelled);
+                // Chunk fully rendered: its characters and the frames they
+                // took are now a measured sample of this voice's speed.
+                spokenChars += request.chunks.get(chunk.index).length();
+                spokenFrames = framesWritten;
             }
         } catch (InterruptedException e) {
             // Stopped.
@@ -403,6 +421,7 @@ public class KokoroTtsService extends Service {
             audioTrack = null;
         }
         framesWritten = 0;
+        this.sampleRate = sampleRate;
         interChunkSilence = new float[(int) (sampleRate * 0.3f)];
         int minBuffer = AudioTrack.getMinBufferSize(
             sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_FLOAT);
@@ -509,14 +528,60 @@ public class KokoroTtsService extends Service {
         updatePlaybackState(true);
     }
 
+    /**
+     * Publish transport state plus the elapsed position. The position is real
+     * (frames the AudioTrack has actually played), and the playback speed tells
+     * the system media controls to keep the seek bar moving between updates —
+     * without both, the notification shows no progress at all.
+     */
     private void updatePlaybackState(boolean playing) {
         if (mediaSession == null) return;
         mediaSession.setPlaybackState(new PlaybackState.Builder()
             .setActions(PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE
                 | PlaybackState.ACTION_PLAY_PAUSE | PlaybackState.ACTION_STOP
                 | PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS)
-            .setState(playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED, 0, 1f)
+            .setState(
+                playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED,
+                positionMs(),
+                playing ? 1f : 0f)
             .build());
+    }
+
+    /** Milliseconds of audio the device has actually played in this queue. */
+    private long positionMs() {
+        AudioTrack track = audioTrack;
+        if (track == null || sampleRate <= 0) return 0;
+        long frames = track.getPlaybackHeadPosition() & 0xFFFFFFFFL;
+        return frames * 1000L / sampleRate;
+    }
+
+    /**
+     * Expected length of the whole queue, used as the seek bar's maximum.
+     * Audio already rendered gives an exact milliseconds-per-character figure
+     * for this voice and rate, and the rest of the queue is projected from it,
+     * so the estimate converges as reading goes on. Until enough audio exists
+     * to measure, a nominal speaking rate stands in.
+     */
+    private long durationMs() {
+        long position = positionMs();
+        Request req = request;
+        if (req == null || sampleRate <= 0 || queuedChars <= 0) return position;
+        long chars = spokenChars;
+        long renderedMs = spokenFrames * 1000L / sampleRate;
+        double msPerChar = chars >= MIN_CHARS_FOR_ESTIMATE && renderedMs > 0
+            ? renderedMs / (double) chars
+            : 1000.0 / (DEFAULT_CHARS_PER_SECOND * Math.max(0.1f, req.rate));
+        long remaining = Math.max(0, queuedChars - chars);
+        return Math.max(position, renderedMs + Math.round(remaining * msPerChar));
+    }
+
+    /** Characters left to read in `req`, from its start index to the end. */
+    private static long countChars(Request req) {
+        long total = 0;
+        for (int i = Math.max(0, req.startIndex); i < req.chunks.size(); i++) {
+            total += req.chunks.get(i).length();
+        }
+        return total;
     }
 
     private void updateNotificationLine(String line) {
@@ -526,6 +591,8 @@ public class KokoroTtsService extends Service {
                 .putString(MediaMetadata.METADATA_KEY_TITLE,
                     request != null && request.title != null ? request.title : "Reading aloud")
                 .putString(MediaMetadata.METADATA_KEY_ARTIST, line)
+                // Without a duration the media controls draw no seek bar at all.
+                .putLong(MediaMetadata.METADATA_KEY_DURATION, durationMs())
                 .build());
         }
         NotificationManager manager =
