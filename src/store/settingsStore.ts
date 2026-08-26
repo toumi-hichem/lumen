@@ -71,7 +71,9 @@ export interface AppSettings {
 export const defaultSettings: AppSettings = {
   reading: {
     themeId: 'daylight',
-    followSystemTheme: false,
+    // Auto by default: a fresh install matches the device's light/dark mode
+    // rather than forcing a light page on someone reading at night.
+    followSystemTheme: true,
     fontId: 'spectral',
     fontScale: 1,
     lineHeight: 1.6,

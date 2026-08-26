@@ -1,10 +1,9 @@
 import {
-  Moon, Sun, Headphones, Pause, Play, Square, Loader2,
+  Palette, Headphones, Pause, Play, Square, Loader2,
   ChevronsDown, List, Bookmark, Search, Settings2,
   ChevronLeft, Clock,
 } from 'lucide-react'
 import type { TtsStatus } from '@/tts/controller'
-import type { ThemeMode } from '@/theme/tokens'
 import type { PanelTab } from './ReaderPanel'
 import { useSettingsStore } from '@/store/settingsStore'
 import { Select, type SelectOption } from '@/ui/Select'
@@ -19,8 +18,7 @@ export interface ReaderActionBarProps {
   canAutoScroll: boolean
   autoScroll: boolean
   ttsStatus: TtsStatus
-  themeMode: ThemeMode
-  onToggleTheme: () => void
+  onOpenTheme: () => void
   onOpenTts: () => void
   onOpenAutoScroll: () => void
   onOpenPanel: (tab: PanelTab) => void
@@ -46,7 +44,7 @@ const SLEEP_OPTIONS: SelectOption[] = [
 ]
 
 export const ALL_ACTION_META: Array<{ id: string; label: string; icon: React.ReactNode }> = [
-  { id: 'theme', label: 'Theme', icon: <Moon size={16} /> },
+  { id: 'theme', label: 'Theme', icon: <Palette size={16} /> },
   { id: 'tts', label: 'Listen', icon: <Headphones size={16} /> },
   { id: 'autoscroll', label: 'Scroll', icon: <ChevronsDown size={16} /> },
   { id: 'toc', label: 'Contents', icon: <List size={16} /> },
@@ -69,9 +67,9 @@ export function ReaderActionBar(props: ReaderActionBarProps) {
   const actionMap: Record<string, ActionDef> = {
     theme: {
       id: 'theme',
-      icon: props.themeMode === 'dark' ? <Sun size={20} /> : <Moon size={20} />,
-      label: props.themeMode === 'dark' ? 'Light' : 'Dark',
-      onClick: props.onToggleTheme,
+      icon: <Palette size={20} />,
+      label: 'Theme',
+      onClick: props.onOpenTheme,
     },
     tts: {
       id: 'tts',

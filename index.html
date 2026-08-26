@@ -48,7 +48,11 @@
           var raw = localStorage.getItem('CapacitorStorage.lumen.settings.v1')
           if (raw) settings = JSON.parse(raw)
         } catch (_) {}
-        var follow = !!(settings && settings.reading && settings.reading.followSystemTheme)
+        // Auto is the default, so a first run with no saved settings follows
+        // the OS instead of pre-painting light.
+        var follow = settings && settings.reading
+          ? !!settings.reading.followSystemTheme
+          : true
         function resolve(id) {
           if (follow && id && PAIR[id] && isDark(id) !== systemDark) return PAIR[id]
           return id
