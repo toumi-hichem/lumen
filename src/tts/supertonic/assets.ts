@@ -106,14 +106,47 @@ export function createAssetSource(): AssetSource {
   }
 }
 
-/** True only when every manifest asset is fully present in the persistent cache. */
+/**
+ * True when the assets are usable without a download: either every manifest
+ * file is fully present in the persistent cache, or a build bundled them under
+ * `public/supertonic` (scripts/fetch-supertonic.sh). `createAssetSource` reads
+ * through to the bundle, so ignoring it here would show "needs assets" for a
+ * voice that in fact works.
+ */
 export async function isSupertonicDownloaded(): Promise<boolean> {
+  if (await isCacheComplete()) return true
+  return hasBundledAssets()
+}
+
+async function isCacheComplete(): Promise<boolean> {
   if (!cachesAvailable()) return false
   const cache = await caches.open(CACHE_NAME)
   for (const rel of SUPERTONIC_MANIFEST) {
     if (!(await isFileComplete(cache, rel))) return false
   }
   return true
+}
+
+/** Memoised: the bundle is fixed at build time, so probe it at most once. */
+let bundledProbe: Promise<boolean> | null = null
+
+/**
+ * Probe for a bundled install. `tts.json` is the cheapest manifest entry, and
+ * it is parsed rather than merely status-checked because a dev server's SPA
+ * fallback answers a missing asset with 200 + index.html.
+ */
+function hasBundledAssets(): Promise<boolean> {
+  bundledProbe ??= (async () => {
+    try {
+      const res = await fetch(`${PUBLIC_BASE}/onnx/tts.json`)
+      if (!res.ok) return false
+      JSON.parse(await res.text())
+      return true
+    } catch {
+      return false
+    }
+  })()
+  return bundledProbe
 }
 
 /** Remove all downloaded Supertonic assets (current and legacy versions). */

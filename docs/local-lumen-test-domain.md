@@ -12,18 +12,26 @@ which breaks a plain-http dev proxy.
 
 ## How it works
 
+Linux/macOS:
+
 ```
 http://lumen.test  ->  Apache vhost on :80  ->  Vite dev server on :5183
 ```
 
-- `/etc/hosts` resolves `lumen.test` to `127.0.0.1`.
-- Apache (already the machine's :80 server) reverse-proxies the `lumen.test`
-  vhost to the Vite dev server.
+Windows:
+
+```
+http://lumen.test  ->  Caddy (Caddyfile at repo root) on :80  ->  Vite dev server on :5183
+```
+
+- The hosts file resolves `lumen.test` to `127.0.0.1`.
+- The local :80 server reverse-proxies the `lumen.test` vhost to the Vite dev
+  server, forwarding WebSocket upgrades so HMR works.
 - `server.allowedHosts` in `vite.config.ts` lists `lumen.test` so Vite accepts
   the forwarded `Host` header (it blocks unknown hosts as a DNS-rebinding
   guard).
 
-## One-time setup
+## One-time setup (Linux/macOS)
 
 1. Map the name to loopback:
 
@@ -48,7 +56,49 @@ http://lumen.test  ->  Apache vhost on :80  ->  Vite dev server on :5183
 `server.allowedHosts` is already set in `vite.config.ts`; restart the dev server
 (`just dev-stop; just dev-bg`) after changing it.
 
-## The vhost
+## One-time setup (Windows)
+
+Apache/nginx have no clean native install on Windows, so this uses
+[Caddy](https://caddyserver.com) instead — a single binary that reverse-proxies
+WebSockets automatically, no extra module needed.
+
+1. Install Caddy (already done if you're reading this after asking Claude to
+   set it up):
+
+   ```powershell
+   winget install --id CaddyServer.Caddy -e
+   ```
+
+   Restart your terminal afterward so the updated PATH takes effect.
+
+2. Map the name to loopback. This edits a protected system file, so it needs
+   an **Admin PowerShell** (right-click Windows Terminal/PowerShell ->
+   "Run as administrator"):
+
+   ```powershell
+   Add-Content -Path "$env:WINDIR\System32\drivers\etc\hosts" -Value "127.0.0.1 lumen.test"
+   ```
+
+3. Start the proxy (from an ordinary, non-admin shell — Windows doesn't
+   reserve port 80 for admins the way Unix does):
+
+   ```powershell
+   just proxy-bg
+   ```
+
+   Stop it later with `just proxy-stop`. The `Caddyfile` at the repo root
+   holds the config:
+
+   ```
+   lumen.test:80 {
+       reverse_proxy 127.0.0.1:5183
+   }
+   ```
+
+`server.allowedHosts` is already set in `vite.config.ts`; restart the dev server
+(`just dev-stop; just dev-bg`) after changing it.
+
+## The Apache vhost (Linux/macOS)
 
 ```apache
 # Reverse-proxy lumen.test (port 80) to the local Vite dev server on :5183.
